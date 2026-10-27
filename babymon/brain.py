@@ -208,7 +208,7 @@ def observe(
             event = ControlsChanged(at=fact.at, controls=controls)
             return replace(state, controls=controls), (Record(event),)
         case DeliveryResult():
-            if fact.delivered or not state.capabilities.push or fact.kind not in state.ledger:
+            if not _retry_after_failed_push(state, fact):
                 return state, ()
             ledger = {k: v for k, v in state.ledger.items() if k != fact.kind}
             return replace(state, ledger=ledger), ()
@@ -272,15 +272,24 @@ def _schedule_vision(
     if since_last >= period:
         reason = VisionReason.CONFIRM if confirming else VisionReason.PERIODIC
     elif (
-        state.last_signal in (Signal.MOVING, Signal.ACTIVE)
-        and signal is Signal.QUIET
-        and since_last >= tuning.vision_min_spacing_s
+        _motion_just_ended(state.last_signal, signal) and since_last >= tuning.vision_min_spacing_s
     ):
         reason = VisionReason.SETTLED_AFTER_MOTION
     else:
         return track, None
     track = replace(track, in_flight_since=at, last_attempt_at=at, motion_since_attempt=False)
     return track, RequestVision(at=at, reason=reason)
+
+
+def _retry_after_failed_push(state: MonitorState, fact: DeliveryResult) -> bool:
+    """A failed push drops the cooldown so the next Tick re-fires. With push disabled every
+    delivery fails, so the cooldown stays and the log gets one undelivered row per cooldown."""
+    return not fact.delivered and state.capabilities.push and fact.kind in state.ledger
+
+
+def _motion_just_ended(previous: Signal, current: Signal) -> bool:
+    """The resting position after movement is what the model should judge, not motion blur."""
+    return previous in (Signal.MOVING, Signal.ACTIVE) and current is Signal.QUIET
 
 
 def situation(state: MonitorState, tuning: Tuning) -> Situation:

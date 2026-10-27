@@ -174,6 +174,8 @@ Rejected:
 - Fragmented-MP4 segment flags combined with the multi-output command are inferred, not measured. Unit 5 measures them.
 - The motion ROI needs a one-time setup. Should the dashboard offer a rectangle picker, or is an env var enough for v1?
 
+- Open from the comment review (2026-10-27): `WebDeps.store` is typed as the concrete `Store` while the web tests pass a fake, so the slice `web.py` reads should become a `Protocol` once a type checker is added. `Tuning` groups its fields by concern (alert, vision, sleep, cooldown) in order only; nested groups matching the `BABYMON_TUNING__*` layout are the shape if it grows.
+
 ## Next implementation step
 
 Write `domain.py`, `sleep.py`, `rules.py` and `brain.py` with table-driven pytest scripts for each hard rule, because every later unit only feeds facts into, or executes effects out of, that core.

@@ -25,6 +25,9 @@ class Latest[T]:
         """Replace the value and bump the version. Never blocks."""
         self._value = value
         self._version += 1
+        self._wake_waiters()
+
+    def _wake_waiters(self) -> None:
         self._changed.set()
         self._changed = asyncio.Event()
 
