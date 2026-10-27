@@ -19,12 +19,34 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Annotated, Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from babymon.domain import Fact, Situation, Still
+from babymon.domain import (
+    AlertSent,
+    Fact,
+    Instant,
+    SetControls,
+    Situation,
+    SnapshotRef,
+    Still,
+    VisionObserved,
+)
 from babymon.latest import Latest
 from babymon.store import Store
+
+INDEX = Path(__file__).parent / "static" / "index.html"
+NO_STORE = {"Cache-Control": "no-store"}
+Hours = Annotated[float, Query(gt=0, le=24)]
+
+
+def _utcnow() -> Instant:
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +55,104 @@ class WebDeps:
     situation: Latest[Situation]
     stills: Latest[Still]
     store: Store
+    now: Callable[[], Instant] = _utcnow
+
+
+class ControlsPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    armed: bool | None = None
+    nap_mode: bool | None = None
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> ControlsPatch:
+        if self.armed is None and self.nap_mode is None:
+            raise ValueError("set armed, nap_mode, or both")
+        return self
+
+
+def _unavailable(detail: str) -> HTTPException:
+    return HTTPException(503, detail, headers=NO_STORE)
+
+
+def _media(resolve: Callable[[str], Path], name: str) -> FileResponse:
+    try:
+        path = resolve(name)
+    except ValueError:
+        raise HTTPException(404) from None
+    if not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path)
 
 
 def create_app(deps: WebDeps) -> FastAPI:
-    raise NotImplementedError
+    app = FastAPI(title="babymon", docs_url=None, redoc_url=None, openapi_url=None)
+    store = deps.store
+
+    @app.get("/", response_class=HTMLResponse)
+    def index() -> str:
+        return INDEX.read_text()
+
+    @app.get("/api/state")
+    def state() -> Situation:
+        situation = deps.situation.get()
+        if situation is None:
+            raise _unavailable("no situation published yet")
+        return situation
+
+    @app.get("/api/frame.jpg")
+    def frame() -> Response:
+        still = deps.stills.get()
+        situation = deps.situation.get()
+        if still is None or (situation is not None and not situation.camera_up):
+            raise _unavailable("camera is down")
+        return Response(still.jpeg, media_type="image/jpeg", headers=NO_STORE)
+
+    @app.get("/api/timeline")
+    def timeline(hours: Hours = 24) -> list[dict[str, Any]]:
+        until = deps.now()
+        spans = store.sleep_timeline(until - timedelta(hours=hours), until)
+        return [{"state": s.state, "start": s.start, "end": s.end} for s in spans]
+
+    @app.get("/api/events")
+    def events(hours: Hours = 24) -> list[dict[str, Any]]:
+        until = deps.now()
+        stored = store.events(until - timedelta(hours=hours), until)
+        out = []
+        for item in sorted(stored, key=lambda s: s.event.at, reverse=True):
+            event = item.event
+            snapshot = event.snapshot if isinstance(event, VisionObserved | AlertSent) else None
+            clip = store.clip_at(event.at)
+            clip_url = f"/media/segments/{clip.name}#t={clip.offset_s:g}" if clip else None
+            out.append(
+                {
+                    "id": item.id,
+                    "event": event.model_dump(mode="json"),
+                    "snapshot_url": f"/media/snapshots/{snapshot}" if snapshot else None,
+                    "clip_url": clip_url,
+                }
+            )
+        return out
+
+    @app.post("/api/controls", status_code=202)
+    def controls(patch: ControlsPatch) -> ControlsPatch:
+        deps.publish(SetControls(deps.now(), armed=patch.armed, nap_mode=patch.nap_mode))
+        return patch
+
+    @app.post("/api/reference")
+    def reference() -> dict[str, Any]:
+        still = deps.stills.get()
+        if still is None:
+            raise _unavailable("no frame to store")
+        store.set_reference(still)
+        return {"at": still.at}
+
+    @app.get("/media/snapshots/{name}")
+    def snapshot(name: str) -> FileResponse:
+        return _media(lambda n: store.snapshot_path(SnapshotRef(n)), name)
+
+    @app.get("/media/segments/{name}")
+    def segment(name: str) -> FileResponse:
+        return _media(store.segment_path, name)
+
+    return app

@@ -156,6 +156,8 @@ Rejected:
 - `NoiseFloor` windows by call count (600 calls is 10 minutes at the audio actor's 1 Hz), because `above_floor(rms_db)` carries no timestamp (`audio.py`).
 - `probe camera` and `probe audio` land as `camera.probe_camera(cfg, seconds) -> CameraProbe`, `audio.load_clip(path)` and `audio.probe_audio(samples, classifier)`. The CLI prints them and runs `Recorder` alongside for the segment listing.
 - `pyproject.toml` gained a `slow` pytest marker for tests that load the YAMNet model.
+- `WebDeps` gained a defaulted `now: Callable[[], Instant]` so route windows and the `SetControls` timestamp are testable without a clock patch (`web.py`). Callers that pass the four sketch fields are unaffected.
+- `babymon probe alert --priority` takes `normal|high|emergency`, not `-2..2`, and `run` gained `--record-facts FILE` (`__main__.py`). The sketch's `app.run(settings, initial_controls)` becomes `app.run(settings, initial_controls, record_facts)`, and a new `babymon reference` verb needs `camera.grab_still(settings) -> Still`. The JSONL layout is documented in `factlog.py`.
 
 ## Open questions and risks
 
