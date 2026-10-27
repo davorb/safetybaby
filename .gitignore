@@ -6,3 +6,4 @@ data/
 models/*.onnx
 .pytest_cache/
 .ruff_cache/
+models/yamnet_class_map.csv

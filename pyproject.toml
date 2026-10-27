@@ -37,6 +37,7 @@ packages = ["babymon"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = ["slow: loads the YAMNet model"]
 
 [tool.ruff]
 line-length = 100
