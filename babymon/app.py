@@ -98,7 +98,11 @@ class Backends:
     @classmethod
     def from_settings(cls, settings: Settings) -> Backends:
         vision = (
-            ClaudeVision(settings.vision.api_key.get_secret_value(), settings.vision.model)
+            ClaudeVision(
+                settings.vision.api_key.get_secret_value(),
+                settings.vision.model,
+                api_frame_width=settings.vision.api_frame_width,
+            )
             if settings.vision
             else None
         )

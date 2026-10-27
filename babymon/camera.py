@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ctypes
 import logging
 import os
 import re
@@ -192,7 +193,12 @@ async def spawn(
     pass_fds: tuple[int, ...] = (),
     stdout: int | None = asyncio.subprocess.DEVNULL,
 ) -> asyncio.subprocess.Process:
-    """Start a child in its own process group so `reap` takes down anything it forks."""
+    """Start a child in its own process group so `reap` takes down anything it forks.
+
+    The child also asks the kernel to SIGKILL it when this process dies, so a kill -9
+    of babymon cannot leave a recorder ffmpeg writing segments on its own (measured
+    2026-10-27: the recorder's only pipe is -progress, whose write errors ffmpeg ignores).
+    """
     return await asyncio.create_subprocess_exec(
         *argv,
         stdin=asyncio.subprocess.DEVNULL,
@@ -201,7 +207,13 @@ async def spawn(
         env={**os.environ, **(env or {})},
         pass_fds=pass_fds,
         start_new_session=True,
+        preexec_fn=_die_with_parent,
     )
+
+
+def _die_with_parent() -> None:
+    PR_SET_PDEATHSIG = 1
+    ctypes.CDLL("libc.so.6", use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
 
 
 async def reap(proc: asyncio.subprocess.Process) -> None:
