@@ -30,7 +30,11 @@ class Pushover:
     """
 
     def __init__(
-        self, app_token: str, user_keys: tuple[str, ...], emergency_retry_s: int, emergency_expire_s: int
+        self,
+        app_token: str,
+        user_keys: tuple[str, ...],
+        emergency_retry_s: int,
+        emergency_expire_s: int,
     ) -> None:
         raise NotImplementedError
 

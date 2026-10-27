@@ -30,7 +30,7 @@ from typing import Never
 
 from babymon.brain import MonitorState
 from babymon.config import Settings
-from babymon.domain import Alert, Effect, Event, Fact, RequestVision, Situation, SetControls, Tuning
+from babymon.domain import Alert, Effect, Event, Fact, RequestVision, SetControls, Situation, Tuning
 from babymon.latest import Latest
 from babymon.rules import Decider
 from babymon.store import Store

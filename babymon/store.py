@@ -21,7 +21,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from babymon.brain import Restored
-from babymon.domain import Controls, Event, Instant, SleepState, SnapshotRef, Still
+from babymon.domain import Event, Instant, SleepState, SnapshotRef, Still
 
 RETENTION = timedelta(hours=24)
 

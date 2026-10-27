@@ -42,7 +42,9 @@ class _WireObservation(BaseModel):
     domain type."""
 
     body: BodyPosition = Field(description="...")
-    head: HeadDirection = Field(description="Direction the face points, from the baby's own left/right.")
+    head: HeadDirection = Field(
+        description="Direction the face points, from the baby's own left/right."
+    )
     face_covered: bool = Field(description="...")
     in_crib: bool
     eyes: Eyes
