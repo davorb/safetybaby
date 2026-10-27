@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Never, Protocol
 
 import anthropic
+import cv2
+import numpy as np
 from pydantic import BaseModel, Field
 
 from babymon.config import VisionConfig
@@ -108,13 +110,33 @@ def system_prompt(has_reference: bool) -> str:
     return _BASE_PROMPT + (_REFERENCE_PROMPT if has_reference else "")
 
 
-def _image(still: Still) -> dict[str, object]:
+JPEG_QUALITY = 80
+
+
+def _downscale(jpeg: bytes, max_width: int) -> bytes:
+    """Image tokens scale with pixels, so the API sees at most max_width wide. A still
+    already within the limit is sent as captured."""
+    image = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+    if image is None:
+        raise VisionError("frame is not a decodable image")
+    height, width = image.shape[:2]
+    if width <= max_width:
+        return jpeg
+    size = (max_width, max(1, round(height * max_width / width)))
+    small = cv2.resize(image, size, interpolation=cv2.INTER_AREA)
+    ok, encoded = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+    if not ok:
+        raise VisionError("could not re-encode the frame")
+    return encoded.tobytes()
+
+
+def _image(still: Still, max_width: int) -> dict[str, object]:
     return {
         "type": "image",
         "source": {
             "type": "base64",
             "media_type": "image/jpeg",
-            "data": base64.standard_b64encode(still.jpeg).decode("ascii"),
+            "data": base64.standard_b64encode(_downscale(still.jpeg, max_width)).decode("ascii"),
         },
     }
 
@@ -123,11 +145,11 @@ def _text(text: str) -> dict[str, object]:
     return {"type": "text", "text": text}
 
 
-def _content(frame: Still, reference: Still | None) -> list[dict[str, object]]:
+def _content(frame: Still, reference: Still | None, max_width: int) -> list[dict[str, object]]:
     blocks: list[dict[str, object]] = []
     if reference is not None:
-        blocks += [_text("Reference image of the correct position:"), _image(reference)]
-    blocks += [_image(frame), _text("Assess the current frame.")]
+        blocks += [_text("Reference image of the correct position:"), _image(reference, max_width)]
+    blocks += [_image(frame, max_width), _text("Assess the current frame.")]
     return blocks
 
 
@@ -161,6 +183,7 @@ class ClaudeVision:
         api_key: str,
         model: str,
         max_tokens: int = 4096,
+        api_frame_width: int = 640,
         client: anthropic.Anthropic | None = None,
     ) -> None:
         """Holds an `anthropic.Anthropic` client. The sync client runs in a worker
@@ -168,6 +191,7 @@ class ClaudeVision:
         self._client = client or anthropic.Anthropic(api_key=api_key, timeout=REQUEST_TIMEOUT_S)
         self._model = model
         self._max_tokens = max_tokens
+        self._api_frame_width = api_frame_width
 
     def __repr__(self) -> str:
         return f"ClaudeVision(model={self._model!r})"
@@ -177,13 +201,14 @@ class ClaudeVision:
         Every failure, including a refusal or a truncated answer, becomes VisionError."""
         failure: str | None = None
         try:
+            content = _content(frame, reference, self._api_frame_width)
             response = await asyncio.to_thread(
                 self._client.messages.parse,
                 model=self._model,
                 max_tokens=self._max_tokens,
                 output_config={"effort": "low"},
                 system=system_prompt(reference is not None),
-                messages=[{"role": "user", "content": _content(frame, reference)}],
+                messages=[{"role": "user", "content": content}],
                 output_format=_WireObservation,
             )
         except (anthropic.AnthropicError, ValueError) as e:
@@ -247,7 +272,9 @@ async def probe_vision(frame: Path, reference: Path | None, config: VisionConfig
     if config is None:
         print("vision disabled: no API key", file=sys.stderr)
         return 1
-    backend = ClaudeVision(config.api_key.get_secret_value(), config.model)
+    backend = ClaudeVision(
+        config.api_key.get_secret_value(), config.model, api_frame_width=config.api_frame_width
+    )
     captured = datetime.now(UTC)
     ref = Still(reference.read_bytes(), captured) if reference else None
     try:

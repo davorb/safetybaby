@@ -7,7 +7,9 @@ from datetime import timedelta
 from pathlib import Path
 
 import anthropic
+import cv2
 import httpx2
+import numpy as np
 import pytest
 from pydantic import SecretStr
 
@@ -29,8 +31,22 @@ from babymon.vision import ClaudeVision, VisionError, probe_vision, run_vision, 
 from tests.conftest import T0, at, observation
 
 SECRET = "sk-ant-secret-key-do-not-leak"
-FRAME = Still(b"\xff\xd8frame", T0)
-REFERENCE = Still(b"\xff\xd8reference", T0 - timedelta(days=1))
+
+
+def jpeg(width: int, height: int) -> bytes:
+    noise = np.random.default_rng(width).integers(0, 255, (height, width, 3), dtype=np.uint8)
+    ok, encoded = cv2.imencode(".jpg", noise)
+    assert ok
+    return encoded.tobytes()
+
+
+def width_of(data: bytes) -> tuple[int, int]:
+    image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+    return image.shape[1], image.shape[0]
+
+
+FRAME = Still(jpeg(64, 36), T0)
+REFERENCE = Still(jpeg(48, 27), T0 - timedelta(days=1))
 
 READING = {
     "body": "side_left",
@@ -91,6 +107,39 @@ def status(code: int, error_type: str, text: str = "nope") -> Server:
 
 
 class TestClaudeVision:
+    async def test_large_stills_are_downscaled_to_the_api_width(self):
+        server = ok()
+        big = Still(jpeg(1280, 720), T0)
+
+        await server.vision().observe(big, big)
+
+        images = [b for b in server.body["messages"][0]["content"] if b["type"] == "image"]
+        sizes = [width_of(base64.b64decode(b["source"]["data"])) for b in images]
+        assert sizes == [(640, 360), (640, 360)]
+
+    async def test_width_limit_is_configurable(self):
+        server = ok()
+        client = server.vision()._client
+        vision = ClaudeVision(SECRET, "m", api_frame_width=320, client=client)
+
+        await vision.observe(Still(jpeg(1280, 720), T0), None)
+
+        data = server.body["messages"][0]["content"][0]["source"]["data"]
+        assert width_of(base64.b64decode(data)) == (320, 180)
+
+    async def test_still_within_the_limit_keeps_its_size(self):
+        server = ok()
+        small = Still(jpeg(400, 225), T0)
+
+        await server.vision().observe(small, None)
+
+        data = server.body["messages"][0]["content"][0]["source"]["data"]
+        assert width_of(base64.b64decode(data)) == (400, 225)
+
+    async def test_undecodable_frame_is_a_vision_error(self):
+        with pytest.raises(VisionError):
+            await ok().vision().observe(Still(b"not a jpeg", T0), None)
+
     async def test_reading_is_mapped_into_the_domain_observation(self):
         server = ok()
 

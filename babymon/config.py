@@ -60,6 +60,8 @@ class CameraConfig(BaseModel, frozen=True):
 class VisionConfig(BaseModel, frozen=True):
     api_key: SecretStr
     model: str = "claude-haiku-5-5"
+    api_frame_width: int = 640
+    """Stills are downscaled to this width before upload; image cost scales with pixels."""
 
 
 class PushoverConfig(BaseModel, frozen=True):
