@@ -2,9 +2,9 @@
 
 A Decider sees only the JSON-able Situation and answers which alert conditions hold
 right now. Streaks and durations arrive precomputed, already filtered to confident,
-in-crib readings by the brain. It knows nothing about priorities, cooldowns, arming, or delivery; those
-are policy in brain.ALERT_POLICY and brain.gate(). That keeps the replaceable part as
-small as the brief's "text/JSON in, typed answers out".
+in-crib readings by the brain. It knows nothing about priorities, cooldowns, arming, or
+delivery; those are policy in brain.ALERT_POLICY and brain.gate(). That keeps the
+replaceable part as small as the brief's "text/JSON in, typed answers out".
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         AlertKind.AWAKE_DURING_NAP,
-        lambda s, t: s.controls.nap_mode and s.sleep in (SleepState.AWAKE, SleepState.CRYING),
+        lambda s, t: s.controls.nap_mode and s.sleep is SleepState.AWAKE,
         lambda s: "Awake during nap",
     ),
     Rule(
@@ -64,6 +64,7 @@ RULES: tuple[Rule, ...] = (
 )
 """One row per condition. Adding a rule is adding a row; brain.ALERT_POLICY must gain
 the matching kind or the import-time check in brain.py fails."""
+
 
 class RulesDecider:
     def __init__(self, tuning: Tuning) -> None:

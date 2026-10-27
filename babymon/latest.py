@@ -8,19 +8,35 @@ replaces an immutable reference; readers never see a half-written value.
 
 from __future__ import annotations
 
+import asyncio
+
 
 class Latest[T]:
     def __init__(self) -> None:
-        raise NotImplementedError
+        self._value: T | None = None
+        self._version = 0
+        self._changed = asyncio.Event()
+
+    @property
+    def version(self) -> int:
+        return self._version
 
     def set(self, value: T) -> None:
         """Replace the value and bump the version. Never blocks."""
-        raise NotImplementedError
+        self._value = value
+        self._version += 1
+        # Wake every current waiter, then hand later waiters a fresh event. Waiters
+        # captured the old event before sleeping, so none can miss this set.
+        self._changed.set()
+        self._changed = asyncio.Event()
 
     def get(self) -> T | None:
-        raise NotImplementedError
+        return self._value
 
     async def newer_than(self, version: int) -> tuple[int, T]:
         """Wait until the version exceeds `version`; return (version, value).
         Intermediate values a slow reader missed are dropped on purpose."""
-        raise NotImplementedError
+        while self._version <= version:
+            await self._changed.wait()
+        assert self._value is not None
+        return self._version, self._value
