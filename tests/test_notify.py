@@ -267,7 +267,9 @@ def store(tmp_path: Path) -> Store:
 
 
 class Alerter:
-    def __init__(self, notifier: Recorder, store: Store, still: Still | None = STILL) -> None:
+    def __init__(
+        self, notifier: Recorder | LogOnly, store: Store, still: Still | None = STILL
+    ) -> None:
         self.inbox: asyncio.Queue[Alert] = asyncio.Queue()
         self.stills: Latest[Still] = Latest()
         if still:
@@ -284,23 +286,21 @@ class Alerter:
             )
         )
 
-    async def drain(self) -> None:
-        await asyncio.wait_for(self.inbox.join(), 5)
-
-    async def close(self) -> None:
-        self.task.cancel()
-        await asyncio.gather(self.task, return_exceptions=True)
+    async def process(self, *alerts: Alert) -> None:
+        try:
+            for item in alerts:
+                self.inbox.put_nowait(item)
+            await asyncio.wait_for(self.inbox.join(), 5)
+        finally:
+            self.task.cancel()
+            await asyncio.gather(self.task, return_exceptions=True)
 
 
 class TestRunAlerter:
     async def test_delivered_alert_writes_a_true_row_and_a_delivery_result(self, store: Store):
         recorder = Recorder(True)
         a = Alerter(recorder, store)
-        try:
-            a.inbox.put_nowait(alert(Priority.EMERGENCY, AlertKind.ON_STOMACH))
-            await a.drain()
-        finally:
-            await a.close()
+        await a.process(alert(Priority.EMERGENCY, AlertKind.ON_STOMACH))
 
         (stored,) = store.events(at(-10), at(10))
         row = stored.event
@@ -314,11 +314,7 @@ class TestRunAlerter:
 
     async def test_failed_delivery_writes_a_false_row_with_the_error(self, store: Store):
         a = Alerter(Recorder(False), store)
-        try:
-            a.inbox.put_nowait(alert())
-            await a.drain()
-        finally:
-            await a.close()
+        await a.process(alert())
 
         (stored,) = store.events(at(-10), at(10))
         assert isinstance(stored.event, AlertSent)
@@ -327,23 +323,14 @@ class TestRunAlerter:
 
     async def test_cooldown_recovery_counts_only_the_delivered_row(self, store: Store):
         a = Alerter(Recorder(False, True), store)
-        try:
-            a.inbox.put_nowait(alert(kind=AlertKind.CRYING))
-            a.inbox.put_nowait(alert(kind=AlertKind.HEAD_LEFT))
-            await a.drain()
-        finally:
-            await a.close()
+        await a.process(alert(kind=AlertKind.CRYING), alert(kind=AlertKind.HEAD_LEFT))
 
         assert set(store.restore(at(60), 600).delivered) == {AlertKind.HEAD_LEFT}
 
     async def test_no_still_means_no_snapshot_and_delivery_still_happens(self, store: Store):
         recorder = Recorder(True)
         a = Alerter(recorder, store, still=None)
-        try:
-            a.inbox.put_nowait(alert())
-            await a.drain()
-        finally:
-            await a.close()
+        await a.process(alert())
 
         assert recorder.delivered[0][1] is None
         (stored,) = store.events(at(-10), at(10))
@@ -353,28 +340,13 @@ class TestRunAlerter:
         recorder = Recorder(False, True, True)
         a = Alerter(recorder, store)
         kinds = [AlertKind.FACE_COVERED, AlertKind.CRYING, AlertKind.CAMERA_OFFLINE]
-        try:
-            for kind in kinds:
-                a.inbox.put_nowait(alert(kind=kind))
-            await a.drain()
-        finally:
-            await a.close()
+        await a.process(*(alert(kind=kind) for kind in kinds))
 
         assert [d[0].kind for d in recorder.delivered] == kinds
         assert [f.delivered for f in a.facts] == [False, True, True]
 
     async def test_log_only_records_undelivered_rows(self, store: Store):
-        a = Alerter(Recorder(), store)
-        a.task.cancel()
-        await asyncio.gather(a.task, return_exceptions=True)
-        a.task = asyncio.create_task(
-            run_alerter(a.inbox, LogOnly(), a.stills, store, a.facts.append, now=lambda: at(1))
-        )
-        try:
-            a.inbox.put_nowait(alert())
-            await a.drain()
-        finally:
-            await a.close()
+        await Alerter(LogOnly(), store).process(alert())
 
         (stored,) = store.events(at(-10), at(10))
         assert isinstance(stored.event, AlertSent) and stored.event.delivered is False

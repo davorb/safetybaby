@@ -57,7 +57,7 @@ def observation(**overrides: object) -> Observation:
         eyes=Eyes.CLOSED,
         confidence=0.9,
     )
-    return Observation(**{**base, **overrides})  # type: ignore[arg-type]
+    return Observation.model_validate({**base, **overrides})
 
 
 def seen(t: float, obs: Observation, reason: VisionReason = VisionReason.PERIODIC) -> VisionDone:

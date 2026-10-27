@@ -1,4 +1,4 @@
-"""Unit 10: app.run end to end with a real Store on a tmp dir and the real brain.
+"""app.run end to end with a real Store on a tmp dir and the real brain.
 
 Faked: the camera (the test publishes its facts and stills), the vision backend (a
 script of observations), the notifier (records deliveries, can fail), the audio
