@@ -68,13 +68,9 @@ class _Retryable(Exception):
 
 
 class Pushover:
-    """POST https://api.pushover.net/1/messages.json, multipart, one request addressed to
-    every user key (comma-separated).
-
-    Priority maps to Pushover's scale (NORMAL 0, HIGH 1, EMERGENCY 2). EMERGENCY adds
-    retry (at least 30 s) and expire (at most 10800 s); the domain never sees those fields.
-    Snapshot goes as `attachment`. Transport errors, 429 and 5xx retry with backoff for up
-    to 60 s per alert; other 4xx fail at once.
+    """One multipart request addressed to every user key. EMERGENCY adds retry and
+    expire; the domain never sees those fields. Transport errors, 429 and 5xx retry with
+    backoff for up to 60 s per alert; other 4xx fail at once.
     """
 
     def __init__(
@@ -142,6 +138,8 @@ class Pushover:
         except httpx.HTTPError as e:
             failure = f"transport error ({type(e).__name__})"
         if failure is not None:
+            # Raised outside the except block so the httpx error, which can quote the
+            # request and its token, is not chained.
             raise _Retryable(failure)
 
         if response.status_code >= 500 or response.status_code == 429:
@@ -205,16 +203,9 @@ async def run_alerter(
     publish: Callable[[Fact], None],
     now: Callable[[], Instant] = lambda: datetime.now(UTC),
 ) -> Never:
-    """Sequential, in decision order.
-
-    for alert in inbox:
-        still = stills.get()                                   (latest frame, may be None)
-        snapshot = store.save_snapshot(still, label=alert.kind) if still
-        try deliver -> delivered=True; except DeliveryError -> delivered=False
-        store.append(AlertSent(at=alert.at, alert, snapshot, delivered, detail))
-        publish(DeliveryResult(at=now, kind=alert.kind, delivered))
-    The row is written after the attempt so cooldown recovery counts only alerts that
-    reached a phone. DeliveryResult tells the brain the same thing in-process.
+    """Sequential, in decision order. The row is written after the attempt so cooldown
+    recovery counts only alerts that reached a phone. DeliveryResult tells the brain the
+    same thing in-process.
     """
     while True:
         alert = await inbox.get()

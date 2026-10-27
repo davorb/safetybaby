@@ -18,7 +18,7 @@ import numpy as np
 import numpy.typing as npt
 import onnxruntime as ort
 
-from babymon.camera import PcmWindow
+from babymon.camera import PCM_RATE, PcmWindow
 from babymon.config import Settings
 from babymon.domain import AudioSample, Fact
 from babymon.latest import Latest
@@ -72,9 +72,8 @@ def rms_dbfs(samples: npt.NDArray[np.float32]) -> float:
 async def run_audio(
     pcm: Latest[PcmWindow], classifier: AudioClassifier, publish: Callable[[Fact], None]
 ) -> Never:
-    """for each newer PcmWindow: rms, floor, await to_thread(classifier...),
-    publish(AudioSample(at=window.at, ...)). A window missed while classifying is
-    dropped; the brain treats audio older than 2 s as absent."""
+    """A window missed while classifying is dropped; the brain treats audio older than
+    2 s as absent."""
     floor = NoiseFloor()
     version = 0
     while True:
@@ -94,7 +93,9 @@ def probe_audio(
             floor.above_floor(rms_dbfs(second)),
             classifier.cry_probability(second),
         )
-        for second in (samples[i : i + 16_000] for i in range(0, len(samples) - 15_999, 16_000))
+        for second in (
+            samples[i : i + PCM_RATE] for i in range(0, len(samples) - PCM_RATE + 1, PCM_RATE)
+        )
     ]
 
 
@@ -115,7 +116,7 @@ async def probe(settings: Settings, path: Path) -> None:
 def load_clip(path: Path) -> npt.NDArray[np.float32]:
     """Decode any audio file ffmpeg reads to 16 kHz mono float32, the classifier's input."""
     pcm = subprocess.run(
-        ["ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-ac", "1", "-ar", "16000",
+        ["ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-ac", "1", "-ar", str(PCM_RATE),
          "-f", "s16le", "-"],
         capture_output=True,
         check=True,

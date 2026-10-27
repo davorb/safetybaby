@@ -191,7 +191,7 @@ class Store:
 
     @property
     def segment_dir(self) -> Path:
-        """Handed to camera.ffmpeg_argv. The store owns the name pattern both sides use."""
+        """Handed to the recorder. The store owns the name pattern both sides use."""
         return self._segments
 
     def _connect(self) -> sqlite3.Connection:
@@ -200,9 +200,8 @@ class Store:
     # -- writes
 
     def append(self, event: Event) -> None:
-        """Insert (at, type, payload JSON, snapshot). A ControlsChanged event also
-        upserts the controls row in the same transaction, so controls cannot drift
-        from the log."""
+        """A ControlsChanged event also upserts the controls row in the same transaction,
+        so controls cannot drift from the log."""
         snapshot = event.snapshot if isinstance(event, VisionObserved | AlertSent) else None
         with closing(self._connect()) as conn, conn:
             conn.execute(
@@ -217,9 +216,8 @@ class Store:
                 )
 
     def save_snapshot(self, still: Still, label: str) -> SnapshotRef:
-        """Write tmp file, rename into place. Name derives from still.at and label, so
-        saving the same still twice overwrites instead of duplicating."""
-        label = str(label)
+        """The name derives from still.at and label, so saving the same still twice
+        overwrites instead of duplicating."""
         if not _LABEL.fullmatch(label):
             raise ValueError(f"snapshot label must match [a-z0-9_]+: {label!r}")
         name = f"{_stamp(still.at)}-{label}.jpg"
@@ -227,7 +225,6 @@ class Store:
         return SnapshotRef(name)
 
     def set_reference(self, still: Still) -> None:
-        """Atomic replace of reference.jpg."""
         _write_atomically(self._dir / "reference.jpg", still.jpeg)
 
     def sweep(self, now: Instant) -> SweepReport:
@@ -346,7 +343,6 @@ class Store:
         return Clip(path.name, start, (at - start).total_seconds(), growing)
 
     def snapshot_path(self, ref: SnapshotRef) -> Path:
-        """Resolve inside snapshots/ only; rejects names with path separators."""
         return self._snapshots / _plain_name(ref)
 
     def segment_path(self, name: str) -> Path:

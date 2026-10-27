@@ -6,13 +6,13 @@
 
     babymon probe camera [--seconds 30]
         Run only the camera actor; print frames/s, PCM s/s, stills/s, motion levels,
-        and the segment files that appeared. The check for unit 5.
+        and the segment files that appeared.
     babymon probe audio FILE.wav
-        Print P(cry) and loudness per second. The check for unit 7.
+        Print P(cry) and loudness per second.
     babymon probe vision FRAME.jpg [--reference REF.jpg]
-        Print the typed Observation. The check for unit 8.
+        Print the typed Observation.
     babymon probe alert --priority {normal,high,emergency}
-        Send a test notification with the latest still. The check for unit 9.
+        Send a test notification with a fresh camera frame.
     babymon reference
         Grab one still from the camera and store it as the reference image.
     babymon replay FACTS.jsonl
@@ -20,16 +20,8 @@
         real night's facts become a regression fixture.
 
 Each subcommand imports the module that owns its work only when it runs, so `--help`
-and `replay` need no camera, model or network library. The owning functions are:
-
-    app.run(settings, initial_controls, record_facts)         async
-    camera.probe(settings, seconds)                           async
-    audio.probe(settings, path)                               async
-    vision.probe(settings, frame_path, reference_path)        async
-    notify.probe(settings, priority)                          async
-    camera.grab_still(settings) -> Still                      async
-
-A probe reports failure by raising SystemExit with its message.
+and `replay` need no camera, model or network library. A probe reports failure by
+raising SystemExit with its message.
 """
 
 from __future__ import annotations

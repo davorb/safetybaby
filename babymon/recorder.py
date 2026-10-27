@@ -113,9 +113,10 @@ class _Progress:
             if key != "out_time_us" or not value.lstrip("-").isdigit():
                 continue
             out_time = int(value)
-            if out_time > self._out_time:
-                self._out_time = out_time
-                self.advanced_at = time.monotonic()
-                if not self._up:
-                    self._up = True
-                    self._on_up()
+            if out_time <= self._out_time:
+                continue
+            self._out_time = out_time
+            self.advanced_at = time.monotonic()
+            if not self._up:
+                self._up = True
+                self._on_up()

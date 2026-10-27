@@ -102,9 +102,6 @@ class SleepTracker:
 def classify(evidence: Evidence, tuning: Tuning) -> Signal:
     """Precedence: CRYING > ACTIVE > EYES_OPEN > MOVING > QUIET.
 
-    CRYING: cry_probability >= tuning.cry_probability.
-    ACTIVE / MOVING: motion_peak against tuning.motion_active / motion_moving.
-    EYES_OPEN: fresh confident observation with eyes == Eyes.OPEN.
     Loudness is deliberately ignored: the white-noise machine makes RMS a poor signal,
     and the classifier already sees the waveform.
     """
@@ -121,15 +118,7 @@ def classify(evidence: Evidence, tuning: Tuning) -> Signal:
 
 
 def advance(tracker: SleepTracker, signal: Signal, at: Instant) -> SleepTracker:
-    """Pure transition.
-
-    edge = TRANSITIONS[state].get(signal)
-    if edge is None: return tracker with pending=None
-    if pending is None or pending.to != edge.to: pending = Pending(edge.to, at)
-    if at - pending.since >= edge.dwell_s: return SleepTracker(edge.to, since=at)
-    return tracker with pending
-
-    Idempotent per instant: advancing twice with the same (signal, at) yields the same
+    """Idempotent per instant: advancing twice with the same (signal, at) yields the same
     tracker, so a duplicated Tick cannot double-step the machine.
     """
     edge = TRANSITIONS[tracker.state].get(signal)

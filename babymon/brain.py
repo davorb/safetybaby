@@ -172,35 +172,7 @@ def initial_state(restored: Restored, capabilities: Capabilities, at: Instant) -
 def observe(
     state: MonitorState, fact: Fact, tuning: Tuning
 ) -> tuple[MonitorState, tuple[Effect, ...]]:
-    """Fold one fact. Dispatches on the Fact union with match + assert_never.
-
-    MotionSample   -> raise motion_peak; at or above motion_moving also mark motion
-                      since the last vision attempt.
-    AudioSample    -> store it.
-    VisionDone     -> clear in-flight, update last/streaks, emit Record(VisionObserved).
-    VisionFailed   -> clear in-flight. Streaks untouched.
-    CameraStatus   -> on change only: flip camera_up/since, emit Record(CameraChanged).
-    SetControls    -> apply patch; if the result differs emit Record(ControlsChanged).
-                      Applying the same patch twice emits nothing the second time.
-    DeliveryResult -> delivered=False drops the kind's ledger entry so the next Tick
-                      re-fires. With push disabled nothing can ever deliver, so the
-                      cooldown stands and the log gets one undelivered row per cooldown
-                      instead of one per second.
-    Tick           -> ignored unless later than state.at (a duplicate changes nothing).
-                      1. evidence -> sleep.classify -> sleep.advance;
-                         emit Record(SleepChanged) if the state changed.
-                      2. vision scheduling (below); emit RequestVision if due.
-                      3. reset motion_peak, remember last_signal.
-
-    Vision scheduling, only when capabilities.vision and nothing in flight
-    (an in-flight request older than vision_timeout_s counts as lost):
-        due_periodic = since_last >= (vision_confirm_s if pending_danger else
-                                      vision_period_s if motion since last attempt else
-                                      vision_period_quiet_s)
-        due_settled  = last_signal in (MOVING, ACTIVE) and signal is QUIET
-                       and since_last >= vision_min_spacing_s
-    Checking when motion *ends* sees the new resting position instead of motion blur.
-    """
+    """Fold one fact. Only a Tick advances time, and a duplicate Tick changes nothing."""
     match fact:
         case MotionSample():
             vision = state.vision
@@ -236,6 +208,8 @@ def observe(
             event = ControlsChanged(at=fact.at, controls=controls)
             return replace(state, controls=controls), (Record(event),)
         case DeliveryResult():
+            # With push disabled nothing can ever deliver, so the cooldown stands and the
+            # log gets one undelivered row per cooldown instead of one per second.
             if fact.delivered or not state.capabilities.push or fact.kind not in state.ledger:
                 return state, ()
             ledger = {k: v for k, v in state.ledger.items() if k != fact.kind}
@@ -299,6 +273,7 @@ def _schedule_vision(
         period = tuning.vision_period_quiet_s
     if since_last >= period:
         reason = VisionReason.CONFIRM if confirming else VisionReason.PERIODIC
+    # Checking when motion ends sees the new resting position instead of motion blur.
     elif (
         state.last_signal in (Signal.MOVING, Signal.ACTIVE)
         and signal is Signal.QUIET
@@ -336,14 +311,8 @@ def situation(state: MonitorState, tuning: Tuning) -> Situation:
 def gate(
     state: MonitorState, verdicts: Sequence[Verdict], tuning: Tuning
 ) -> tuple[MonitorState, tuple[Notify, ...]]:
-    """Turn verdicts into notifications under policy.
-
-    - Not armed: no notifications, ledger untouched.
-    - A verdict fires when its kind has no ledger entry or the entry is at least
-      tuning.alert_cooldown_s old. Firing writes ledger[kind] = state.at.
-    - A condition that persists past the cooldown fires again: that is the re-alert.
-    - Priority and title come from ALERT_POLICY; message from verdict.reason.
-    """
+    """Turn verdicts into notifications under policy. A condition that persists past the
+    cooldown fires again, which is the re-alert."""
     if not state.controls.armed:
         return state, ()
     at = state.at

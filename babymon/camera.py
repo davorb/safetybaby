@@ -92,12 +92,6 @@ def rtsp_input(cfg: CameraConfig) -> list[str]:
 
 
 def ffmpeg_argv(cfg: CameraConfig, fds: SessionFds) -> list[str]:
-    """Pure. Analysis outputs of the camera session.
-
-    Frames: -map 0:v -vf fps=4,scale=640:360,format=gray -f rawvideo pipe:<fds.frames>
-    PCM:    -map 0:a -ac 1 -ar 16000 -f s16le pipe:<fds.pcm>
-    Stills: -map 0:v -vf fps=1,scale=1280:720 -q:v 4 -f mjpeg pipe:<fds.stills>
-    """
     return [
         "ffmpeg", "-nostdin", "-v", "error",
         *rtsp_input(cfg),

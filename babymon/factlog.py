@@ -72,8 +72,9 @@ def read(path: Path) -> Iterator[Fact]:
     """Blank lines are skipped. A bad line raises ValueError naming its line number."""
     with path.open() as f:
         for number, line in enumerate(f, 1):
-            if line.strip():
-                try:
-                    yield decode(line)
-                except ValueError as e:
-                    raise ValueError(f"{path}:{number}: {e}") from e
+            if not line.strip():
+                continue
+            try:
+                yield decode(line)
+            except ValueError as e:
+                raise ValueError(f"{path}:{number}: {e}") from e

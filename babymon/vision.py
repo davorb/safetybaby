@@ -186,8 +186,7 @@ class ClaudeVision:
         api_frame_width: int = 640,
         client: anthropic.Anthropic | None = None,
     ) -> None:
-        """Holds an `anthropic.Anthropic` client. The sync client runs in a worker
-        thread so only the SDK names the brief allows are used. `client` is the test seam."""
+        """The sync client runs in a worker thread. `client` is the test seam."""
         self._client = client or anthropic.Anthropic(api_key=api_key, timeout=REQUEST_TIMEOUT_S)
         self._model = model
         self._max_tokens = max_tokens
@@ -214,7 +213,8 @@ class ClaudeVision:
         except (anthropic.AnthropicError, ValueError) as e:
             failure = _explain(e, self._model)
         if failure is not None:
-            # raised outside the except block so the SDK exception is not chained
+            # Raised outside the except block so __context__ stays empty and no SDK
+            # exception, which may quote request details, reaches a traceback.
             raise VisionError(failure)
 
         if response.stop_reason != "end_turn":
@@ -234,17 +234,8 @@ async def run_vision(
     max_still_age_s: float = 5.0,
     now: Callable[[], Instant] = lambda: datetime.now(UTC),
 ) -> Never:
-    """One call in flight at a time.
-
-    for each newer request:
-        still = stills.get(); stale or missing -> publish VisionFailed
-        reference = store.reference()                       (file on disk, may be None)
-        observation = await backend.observe(still, reference)   (VisionError -> VisionFailed)
-        snapshot = store.save_snapshot(still, label="vision")
-        publish(VisionDone(at=still.at, reason=req.reason, observation, snapshot))
-    `at` is the still's capture time, not the response time, so streak timing reflects
-    when the baby was seen.
-    """
+    """One call in flight at a time. VisionDone.at is the still's capture time, not the
+    response time, so streak timing reflects when the baby was seen."""
     version = 0
     while True:
         version, request = await requests.newer_than(version)
@@ -274,8 +265,7 @@ async def probe(settings: Settings, frame: Path, reference: Path | None) -> None
 
 
 async def probe_vision(frame: Path, reference: Path | None, config: VisionConfig | None) -> int:
-    """`babymon probe vision FRAME.jpg [--reference REF.jpg]`. Prints the Observation as
-    JSON and returns the exit code."""
+    """Prints the Observation as JSON and returns the exit code."""
     if config is None:
         print("vision disabled: no API key", file=sys.stderr)
         return 1
