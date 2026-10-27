@@ -160,7 +160,7 @@ class ClaudeVision:
         self,
         api_key: str,
         model: str,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
         client: anthropic.Anthropic | None = None,
     ) -> None:
         """Holds an `anthropic.Anthropic` client. The sync client runs in a worker
@@ -181,6 +181,7 @@ class ClaudeVision:
                 self._client.messages.parse,
                 model=self._model,
                 max_tokens=self._max_tokens,
+                output_config={"effort": "low"},
                 system=system_prompt(reference is not None),
                 messages=[{"role": "user", "content": _content(frame, reference)}],
                 output_format=_WireObservation,

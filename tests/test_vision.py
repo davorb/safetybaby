@@ -111,8 +111,9 @@ class TestClaudeVision:
         await server.vision().observe(FRAME, None)
 
         body = server.body
-        assert (body["model"], body["max_tokens"]) == ("claude-opus-5-5", 1024)
+        assert (body["model"], body["max_tokens"]) == ("claude-opus-5-5", 4096)
         assert "temperature" not in body
+        assert body["output_config"]["effort"] == "low"
         schema = body["output_config"]["format"]["schema"]
         assert set(schema["properties"]) == set(READING)
         assert SECRET in server.requests[-1].headers["authorization"]
