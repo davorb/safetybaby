@@ -138,6 +138,9 @@ class Tuning(Frozen):
     min_confidence: float = 0.5
     # vision scheduling
     vision_period_s: float = 60.0
+    vision_period_quiet_s: float = 900.0
+    """Periodic interval when no motion was seen since the last attempt: a floor so an
+    infrared switch or a slow drift is still re-checked."""
     vision_confirm_s: float = 15.0
     vision_min_spacing_s: float = 10.0
     vision_timeout_s: float = 45.0

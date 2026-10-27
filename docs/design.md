@@ -158,6 +158,10 @@ Rejected:
 - `pyproject.toml` gained a `slow` pytest marker for tests that load the YAMNet model.
 - `WebDeps` gained a defaulted `now: Callable[[], Instant]` so route windows and the `SetControls` timestamp are testable without a clock patch (`web.py`). Callers that pass the four sketch fields are unaffected.
 - `babymon probe alert --priority` takes `normal|high|emergency`, not `-2..2`, and `run` gained `--record-facts FILE` (`__main__.py`). The sketch's `app.run(settings, initial_controls)` becomes `app.run(settings, initial_controls, record_facts)`, and a new `babymon reference` verb needs `camera.grab_still(settings) -> Still`. The JSONL layout is documented in `factlog.py`.
+- Vision cost levers, chosen against a 100 USD monthly credit (Opus 5.5 at one check a minute with two 1280x720 images would cost roughly 1,000 USD a month):
+  - `VisionConfig.model` defaults to `claude-haiku-5-5` (`config.py`, `.env.example`).
+  - `ClaudeVision` downscales the frame and the reference to at most `api_frame_width` (default 640, a `VisionConfig` field) wide with `cv2.resize(INTER_AREA)` and re-encodes JPEG quality 80. A still already within the limit is sent as captured, and an undecodable still raises `VisionError`. The reference is still sent on every check (`vision.py`).
+  - Delta gate: the 60 s PERIODIC cadence applies only when a `MotionSample` at or above `motion_moving` arrived since the last vision attempt. Otherwise the periodic interval is the new `Tuning.vision_period_quiet_s` (900 s), a floor so an infrared switch or slow drift is still re-checked. The fact lives in one field, `VisionTrack.motion_since_attempt`, raised in `observe` and cleared on each attempt. CONFIRM cadence and SETTLED_AFTER_MOTION are unchanged (`domain.py`, `brain.py`). The tests for 60 s periodic checks now feed motion, because their static premise no longer yields a check at 60 s.
 
 ## Open questions and risks
 
@@ -166,7 +170,7 @@ Rejected:
 - Should an emergency condition that clears and returns inside the 10-minute cooldown alert again immediately? The brief says cooldown per type. For FACE_COVERED, a bypass when the condition cleared in between may be safer.
 - When Jev arrives, should the hard rules stay as a local floor (`JevDecider(fallback=RulesDecider)` with verdicts unioned), so a Jev outage or a wrong answer can never suppress an emergency? This design assumes yes.
 - Does the C210 accept a second RTSP session? It is unmeasured. The answer decides whether the one-process tradeoff is necessary or merely tidy.
-- Vision cost and latency: about 1,440 Opus calls a day with two images each. Is that acceptable, or should the periodic interval stretch while ASLEEP and quiet?
+- Vision cost and latency: the defaults are Haiku 5.5, 640 px wide stills, a check every 60 s only while motion was seen since the last check and every 900 s on a static scene (15 s CONFIRM and the settle-after-motion check are unchanged). That is at most 1,440 calls a day with two small images each and about 96 on a quiet night. Measure the real monthly spend against the 100 USD credit before relaxing any lever.
 - Fragmented-MP4 segment flags combined with the multi-output command are inferred, not measured. Unit 5 measures them.
 - The motion ROI needs a one-time setup. Should the dashboard offer a rectangle picker, or is an env var enough for v1?
 

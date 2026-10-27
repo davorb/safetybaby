@@ -97,6 +97,8 @@ class VisionTrack:
     face_covered_streak: int = 0
     stomach_streak: int = 0
     head_left_since: Instant | None = None
+    motion_since_attempt: bool = False
+    """A MotionSample at or above motion_moving arrived since the last attempt."""
 
     def pending_danger(self, at: Instant, tuning: Tuning) -> bool:
         """Any streak started but not yet alerting: schedule CONFIRM checks sooner."""
@@ -172,7 +174,8 @@ def observe(
 ) -> tuple[MonitorState, tuple[Effect, ...]]:
     """Fold one fact. Dispatches on the Fact union with match + assert_never.
 
-    MotionSample   -> raise motion_peak.
+    MotionSample   -> raise motion_peak; at or above motion_moving also mark motion
+                      since the last vision attempt.
     AudioSample    -> store it.
     VisionDone     -> clear in-flight, update last/streaks, emit Record(VisionObserved).
     VisionFailed   -> clear in-flight. Streaks untouched.
@@ -191,14 +194,19 @@ def observe(
 
     Vision scheduling, only when capabilities.vision and nothing in flight
     (an in-flight request older than vision_timeout_s counts as lost):
-        due_periodic = since_last >= (vision_confirm_s if pending_danger else vision_period_s)
+        due_periodic = since_last >= (vision_confirm_s if pending_danger else
+                                      vision_period_s if motion since last attempt else
+                                      vision_period_quiet_s)
         due_settled  = last_signal in (MOVING, ACTIVE) and signal is QUIET
                        and since_last >= vision_min_spacing_s
     Checking when motion *ends* sees the new resting position instead of motion blur.
     """
     match fact:
         case MotionSample():
-            return replace(state, motion_peak=max(state.motion_peak, fact.level)), ()
+            vision = state.vision
+            if fact.level >= tuning.motion_moving:
+                vision = replace(vision, motion_since_attempt=True)
+            return replace(state, motion_peak=max(state.motion_peak, fact.level), vision=vision), ()
         case AudioSample():
             return replace(state, audio=fact), ()
         case VisionDone():
@@ -283,7 +291,12 @@ def _schedule_vision(
         float("inf") if track.last_attempt_at is None else _seconds(track.last_attempt_at, at)
     )
     confirming = track.pending_danger(at, tuning)
-    period = tuning.vision_confirm_s if confirming else tuning.vision_period_s
+    if confirming:
+        period = tuning.vision_confirm_s
+    elif track.motion_since_attempt:
+        period = tuning.vision_period_s
+    else:
+        period = tuning.vision_period_quiet_s
     if since_last >= period:
         reason = VisionReason.CONFIRM if confirming else VisionReason.PERIODIC
     elif (
@@ -294,7 +307,7 @@ def _schedule_vision(
         reason = VisionReason.SETTLED_AFTER_MOTION
     else:
         return track, None
-    track = replace(track, in_flight_since=at, last_attempt_at=at)
+    track = replace(track, in_flight_since=at, last_attempt_at=at, motion_since_attempt=False)
     return track, RequestVision(at=at, reason=reason)
 
 

@@ -14,6 +14,7 @@ from babymon.domain import (
     DeliveryResult,
     Eyes,
     HeadDirection,
+    MotionSample,
     Priority,
     SetControls,
     SleepChanged,
@@ -28,6 +29,8 @@ from tests.conftest import T0, Run, at, observation, seen, start, times
 STOMACH = observation(body=BodyPosition.STOMACH)
 COVERED = observation(face_covered=True)
 LEFT = observation(head=HeadDirection.LEFT)
+MOVING = 0.03
+"""Above Tuning.motion_moving (0.02), below motion_active."""
 AWAKE_EARLIER = (SleepState.AWAKE, T0 - timedelta(minutes=1))
 ASLEEP_EARLIER = (SleepState.ASLEEP, T0 - timedelta(minutes=1))
 
@@ -239,14 +242,45 @@ def test_vision_done_is_recorded(run: Run):
 # ---------------------------------------------------------------- vision scheduling
 
 
-def test_periodic_checks_every_minute(run: Run):
-    run.seconds(1, 1).feed(VisionFailed(at(2), VisionReason.PERIODIC, "x")).seconds(2, 61)
-    run.feed(VisionFailed(at(62), VisionReason.PERIODIC, "x")).seconds(62, 121)
+def test_periodic_checks_every_minute_while_there_is_motion(run: Run):
+    run.seconds(1, 1).feed(VisionFailed(at(2), VisionReason.PERIODIC, "x"))
+    run.seconds(2, 61, motion=MOVING)
+    run.feed(VisionFailed(at(62), VisionReason.PERIODIC, "x")).seconds(62, 121, motion=MOVING)
     assert run.requests() == [
         (at(1), VisionReason.PERIODIC),
         (at(61), VisionReason.PERIODIC),
         (at(121), VisionReason.PERIODIC),
     ]
+
+
+def test_static_scene_is_rechecked_only_at_the_quiet_floor(run: Run):
+    run.seconds(1, 1).feed(VisionFailed(at(2), VisionReason.PERIODIC, "x"))
+    run.seconds(2, 899)
+    assert run.requests() == [(at(1), VisionReason.PERIODIC)]
+    run.seconds(900, 901)
+    assert run.requests() == [(at(1), VisionReason.PERIODIC), (at(901), VisionReason.PERIODIC)]
+
+
+def test_motion_after_a_check_makes_the_next_periodic_due_at_a_minute(run: Run):
+    run.seconds(1, 1).feed(VisionFailed(at(2), VisionReason.PERIODIC, "x"))
+    run.seconds(2, 4).feed(MotionSample(at(5), MOVING)).seconds(5, 61)
+    assert [r for r in run.requests() if r[1] is VisionReason.PERIODIC] == [
+        (at(1), VisionReason.PERIODIC),
+        (at(61), VisionReason.PERIODIC),
+    ]
+
+
+def test_motion_below_the_moving_threshold_does_not_open_the_gate(run: Run):
+    run.seconds(1, 1).feed(VisionFailed(at(2), VisionReason.PERIODIC, "x"))
+    run.seconds(2, 120, motion=0.01)
+    assert run.requests() == [(at(1), VisionReason.PERIODIC)]
+
+
+def test_confirm_runs_at_15s_for_a_static_scene_too(run: Run):
+    run.seconds(1, 1).feed(seen(2, STOMACH)).seconds(2, 31)
+    assert run.requests() == [(at(1), VisionReason.PERIODIC), (at(16), VisionReason.CONFIRM)]
+    run.feed(seen(32, STOMACH)).seconds(32, 40)
+    assert times(run.requests()) == [1.0, 16.0]
 
 
 def test_confirm_checks_every_15s_while_a_streak_is_pending(run: Run):
@@ -256,7 +290,7 @@ def test_confirm_checks_every_15s_while_a_streak_is_pending(run: Run):
 
 def test_confirmed_danger_returns_to_the_periodic_cadence(run: Run):
     run.seconds(1, 1).feed(seen(2, STOMACH)).seconds(2, 16).feed(seen(17, STOMACH))
-    run.seconds(17, 76)
+    run.seconds(17, 76, motion=MOVING)
     assert run.requests()[2:] == [(at(76), VisionReason.PERIODIC)]
 
 
@@ -276,7 +310,7 @@ def test_settled_check_respects_minimum_spacing(run: Run):
 
 
 def test_lost_request_does_not_block_vision_forever(run: Run):
-    run.seconds(1, 61)
+    run.seconds(1, 61, motion=MOVING)
     assert run.requests() == [(at(1), VisionReason.PERIODIC), (at(61), VisionReason.PERIODIC)]
 
 
