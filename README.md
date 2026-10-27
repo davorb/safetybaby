@@ -1,6 +1,6 @@
 # babymon
 
-A self-hosted baby monitor for a TP-Link Tapo C210. It watches the camera's RTSP stream, scores motion and crying on the host, asks Claude about the baby's position about once a minute, records 24 hours of video, and sends a push notification only when a rule holds. It runs without the Claude and Pushover keys too. Vision and push are then shown as disabled and everything else works.
+A self-hosted baby monitor for a TP-Link Tapo C210. It watches the camera's RTSP stream, scores motion and crying on the host, asks Claude about the baby's position about once a minute while there is motion, records 24 hours of video, and sends a push notification only when a rule holds. It runs without the Claude and Pushover keys too. Vision and push are then shown as disabled and everything else works.
 
 ## What you need
 
@@ -80,13 +80,13 @@ A check counts as confident when Claude's confidence is at least `BABYMON_TUNING
 
 ## The dashboard
 
-The page at port 8080 shows the latest frame (refreshed every second), the current sleep state and how long it has held, the **Armed** and **Nap mode** switches, a **Set reference** button, a 24-hour bar of sleep states and the event list for the same window. Each vision check and alert in the list links to its snapshot, and each event links to the recorded clip at the event's offset. Banners at the top say when the camera is down or when vision or push is disabled.
+The page at port 8080 shows the latest frame (refreshed every 2 seconds), the current sleep state and how long it has held, the **Armed** and **Nap mode** switches, a **Set reference** button, a 24-hour bar of sleep states and the event list for the same window. Each vision check and alert in the list links to its snapshot, and each event links to the recorded clip at the event's offset. Banners at the top say when the camera is down or when vision or push is disabled.
 
 The sleep states are asleep, stirring, awake and crying. A fresh start begins in stirring, which no rule alerts on, so a restart cannot fake an "awake during nap" alert.
 
 ## Vision cost
 
-The periodic check calls the configured model once a minute with up to two 1280x720 JPEG images, the reference and the current frame. That is about 1,440 calls a day. `BABYMON_VISION__MODEL` picks the model (default `claude-opus-5-5`), and `BABYMON_TUNING__VISION_PERIOD_S` stretches the interval. A longer period delays "face covered" and "on stomach", which need two consecutive checks, by the same amount. While a dangerous reading is pending, checks run every `BABYMON_TUNING__VISION_CONFIRM_S` (15 s) regardless.
+Each check sends up to two JPEG images, the reference and the current frame, downscaled to `BABYMON_VISION__API_FRAME_WIDTH` (640 px) wide. The periodic check runs every `BABYMON_TUNING__VISION_PERIOD_S` (60 s) only when motion was seen since the last check. On a still scene it runs every `BABYMON_TUNING__VISION_PERIOD_QUIET_S` (900 s). That is at most about 1,440 calls a day and about 96 on a quiet night. A check also runs when motion settles. `BABYMON_VISION__MODEL` picks the model (default `claude-haiku-5-5`). A longer period delays "face covered" and "on stomach", which need two consecutive checks, by the same amount. While a dangerous reading is pending, checks run every `BABYMON_TUNING__VISION_CONFIRM_S` (15 s) regardless.
 
 ## What you must supply
 
