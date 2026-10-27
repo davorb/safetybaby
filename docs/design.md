@@ -20,12 +20,22 @@ Call site 1. A test of the decision logic needs no camera, network, or clock:
 
 ```python
 t0, sec = datetime(2026, 10, 27, 2, 0, tzinfo=UTC), timedelta(seconds=1)
-state = brain.initial_state(Restored(Controls(armed=True), None, {}), Capabilities(vision=True, push=True), t0)
+state = brain.initial_state(
+    Restored(Controls(armed=True), None, {}), Capabilities(vision=True, push=True), t0
+)
 for i, obs in enumerate([stomach, stomach]):
-    state, _ = brain.observe(state, VisionDone(t0 + 15 * i * sec, VisionReason.PERIODIC, obs, SnapshotRef("x.jpg")), tuning)
+    state, _ = brain.observe(
+        state,
+        VisionDone(t0 + 15 * i * sec, VisionReason.PERIODIC, obs, SnapshotRef("x.jpg")),
+        tuning,
+    )
 state, _ = brain.observe(state, Tick(t0 + 31 * sec), tuning)
-state, notes = brain.gate(state, RulesDecider(tuning).evaluate(brain.situation(state, tuning)), tuning)
-assert [(n.alert.kind, n.alert.priority) for n in notes] == [(AlertKind.ON_STOMACH, Priority.EMERGENCY)]
+state, notes = brain.gate(
+    state, RulesDecider(tuning).evaluate(brain.situation(state, tuning)), tuning
+)
+assert [(n.alert.kind, n.alert.priority) for n in notes] == [
+    (AlertKind.ON_STOMACH, Priority.EMERGENCY)
+]
 ```
 
 Call site 2. The brain task in `app.py`, the only place the async decider meets the pure core:
@@ -37,14 +47,21 @@ if isinstance(fact, Tick):
     s = brain.situation(state, tuning)
     state, notifies = brain.gate(state, await decider.decide(s), tuning)
     published.set(s)
-for e in (*effects, *notifies): dispatch(e, events, alerts, vision_requests)
+for e in (*effects, *notifies):
+    dispatch(e, events, alerts, vision_requests)
 ```
 
 Call site 3. Swapping a backend is a constructor change in `app.run`, and nothing else imports the SDK:
 
 ```python
-vision = ClaudeVision(settings.vision.api_key.get_secret_value(), settings.vision.model) if settings.vision else None
-decider: Decider = RulesDecider(settings.tuning)   # later: JevDecider(..., fallback=RulesDecider(...))
+vision = (
+    ClaudeVision(settings.vision.api_key.get_secret_value(), settings.vision.model)
+    if settings.vision
+    else None
+)
+decider: Decider = RulesDecider(
+    settings.tuning
+)  # later: JevDecider(..., fallback=RulesDecider(...))
 ```
 
 ## Shape
@@ -133,6 +150,12 @@ Rejected:
 - `Settings` uses `extra="ignore"` so unrelated variables in `.env` do not fail startup. `pushover.user_keys` and `camera.motion_roi` parse comma-separated strings (`u1,u2`, `x,y,w,h`) instead of JSON. `python-dotenv` is a direct dependency: the `ANTHROPIC_API_KEY` alias is a settings source placed below env and dotenv, so an explicit `BABYMON_VISION__API_KEY` wins.
 - `config.load` reports a missing required group (the whole camera block) as each variable the group needs, not as `BABYMON_CAMERA`.
 - `notify.run_alerter` publishes a `DeliveryResult` fact after each attempt (docstring only; body is still the sketch).
+- The recorder is its own process, as the synthesis decision says. `Camera.__init__` takes only `cfg` and `ffmpeg_argv(cfg, fds)` has no `segment_dir`, because the camera no longer writes segments (`camera.py`). `recorder.py` adds `Recorder(cfg, segment_s=300).run(segment_dir)` and `recorder_argv`. Both processes share `supervise`, `spawn`, `reap` and `watch_stall`, which live in `camera.py` rather than a new module.
+- Fragmented MP4 needs `flush_packets=1` in `-segment_format_options` (`recorder.py`). Measured against the C210: with `movflags=+frag_keyframe+empty_moov+default_base_moof` alone, the segment being written held 28 bytes after 10 s and was unreadable when ffmpeg was SIGKILLed. With `:flush_packets=1` a segment killed mid-write played with h264 and aac streams. Plain MP4 never plays when cut short (no moov atom).
+- The recorder's stall watchdog reads ffmpeg's `-progress` `out_time_us` and fires when it stops advancing for `stall_s`, since a recorder has no frames to count (`recorder.py`).
+- `NoiseFloor` windows by call count (600 calls is 10 minutes at the audio actor's 1 Hz), because `above_floor(rms_db)` carries no timestamp (`audio.py`).
+- `probe camera` and `probe audio` land as `camera.probe_camera(cfg, seconds) -> CameraProbe`, `audio.load_clip(path)` and `audio.probe_audio(samples, classifier)`. The CLI prints them and runs `Recorder` alongside for the segment listing.
+- `pyproject.toml` gained a `slow` pytest marker for tests that load the YAMNet model.
 
 ## Open questions and risks
 
