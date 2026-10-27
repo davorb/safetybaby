@@ -20,12 +20,22 @@ Call site 1. A test of the decision logic needs no camera, network, or clock:
 
 ```python
 t0, sec = datetime(2026, 10, 27, 2, 0, tzinfo=UTC), timedelta(seconds=1)
-state = brain.initial_state(Restored(Controls(armed=True), None, {}), Capabilities(vision=True, push=True), t0)
+state = brain.initial_state(
+    Restored(Controls(armed=True), None, {}), Capabilities(vision=True, push=True), t0
+)
 for i, obs in enumerate([stomach, stomach]):
-    state, _ = brain.observe(state, VisionDone(t0 + 15 * i * sec, VisionReason.PERIODIC, obs, SnapshotRef("x.jpg")), tuning)
+    state, _ = brain.observe(
+        state,
+        VisionDone(t0 + 15 * i * sec, VisionReason.PERIODIC, obs, SnapshotRef("x.jpg")),
+        tuning,
+    )
 state, _ = brain.observe(state, Tick(t0 + 31 * sec), tuning)
-state, notes = brain.gate(state, RulesDecider(tuning).evaluate(brain.situation(state, tuning)), tuning)
-assert [(n.alert.kind, n.alert.priority) for n in notes] == [(AlertKind.ON_STOMACH, Priority.EMERGENCY)]
+state, notes = brain.gate(
+    state, RulesDecider(tuning).evaluate(brain.situation(state, tuning)), tuning
+)
+assert [(n.alert.kind, n.alert.priority) for n in notes] == [
+    (AlertKind.ON_STOMACH, Priority.EMERGENCY)
+]
 ```
 
 Call site 2. The brain task in `app.py`, the only place the async decider meets the pure core:
@@ -37,14 +47,21 @@ if isinstance(fact, Tick):
     s = brain.situation(state, tuning)
     state, notifies = brain.gate(state, await decider.decide(s), tuning)
     published.set(s)
-for e in (*effects, *notifies): dispatch(e, events, alerts, vision_requests)
+for e in (*effects, *notifies):
+    dispatch(e, events, alerts, vision_requests)
 ```
 
 Call site 3. Swapping a backend is a constructor change in `app.run`, and nothing else imports the SDK:
 
 ```python
-vision = ClaudeVision(settings.vision.api_key.get_secret_value(), settings.vision.model) if settings.vision else None
-decider: Decider = RulesDecider(settings.tuning)   # later: JevDecider(..., fallback=RulesDecider(...))
+vision = (
+    ClaudeVision(settings.vision.api_key.get_secret_value(), settings.vision.model)
+    if settings.vision
+    else None
+)
+decider: Decider = RulesDecider(
+    settings.tuning
+)  # later: JevDecider(..., fallback=RulesDecider(...))
 ```
 
 ## Shape
