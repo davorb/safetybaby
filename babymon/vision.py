@@ -18,7 +18,7 @@ from typing import Never, Protocol
 import anthropic
 from pydantic import BaseModel, Field
 
-from babymon.config import VisionConfig
+from babymon.config import Settings, VisionConfig
 from babymon.domain import (
     BodyPosition,
     Eyes,
@@ -239,6 +239,13 @@ async def run_vision(
             continue
         snapshot = await asyncio.to_thread(store.save_snapshot, still, "vision")
         publish(VisionDone(still.at, request.reason, observation, snapshot))
+
+
+async def probe(settings: Settings, frame: Path, reference: Path | None) -> None:
+    """`babymon probe vision FRAME.jpg [--reference REF.jpg]`."""
+    code = await probe_vision(frame, reference, settings.vision)
+    if code:
+        raise SystemExit(code)
 
 
 async def probe_vision(frame: Path, reference: Path | None, config: VisionConfig | None) -> int:

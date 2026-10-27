@@ -12,8 +12,10 @@ from typing import Never, Protocol, assert_never
 
 import httpx
 
+from babymon.config import PushoverConfig, Settings
 from babymon.domain import (
     Alert,
+    AlertKind,
     AlertSent,
     DeliveryResult,
     Fact,
@@ -162,6 +164,37 @@ class LogOnly:
     async def deliver(self, alert: Alert, snapshot: Still | None) -> None:
         log.warning("push disabled, alert not delivered: [%s] %s", alert.kind, alert.title)
         raise DeliveryError("push is disabled: no Pushover keys configured")
+
+
+def notifier_for(cfg: PushoverConfig | None) -> Notifier:
+    if cfg is None:
+        return LogOnly()
+    return Pushover(
+        cfg.app_token.get_secret_value(),
+        cfg.user_keys,
+        cfg.emergency_retry_s,
+        cfg.emergency_expire_s,
+    )
+
+
+async def probe(settings: Settings, priority: Priority) -> None:
+    """`babymon probe alert --priority P`: one test notification with a fresh camera
+    frame attached. Exits with the delivery error when no phone accepted it."""
+    from babymon.camera import grab_still
+
+    still = await grab_still(settings)
+    alert = Alert(
+        kind=AlertKind.CAMERA_OFFLINE,
+        priority=priority,
+        at=still.at,
+        title=f"babymon test ({priority})",
+        message="Test notification from `babymon probe alert`.",
+    )
+    try:
+        await notifier_for(settings.pushover).deliver(alert, still)
+    except DeliveryError as e:
+        raise SystemExit(f"alert not delivered: {e}") from None
+    print(f"delivered {priority} test alert with the frame from {still.at.isoformat()}")
 
 
 async def run_alerter(
