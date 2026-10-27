@@ -124,6 +124,16 @@ Rejected:
 
 ## Implementation reconciliation
 
+- `VisionTrack.pending_danger` is a method `pending_danger(at, tuning)`, not a property. "Started but not yet alerting" needs `unsafe_streak` and `head_left_alert_s` from `Tuning`, and the clock for the head-left duration. It covers both position streaks and a head-left run under the threshold, so CONFIRM cadence applies to all three.
+- `MonitorState.cry_probability: float` became `audio: AudioSample | None`. The 2 s decay needs the sample's timestamp; keeping the fact is one field instead of two.
+- `MonitorState.at` moves only on Tick (and at startup). A Tick with `at <= state.at` is a no-op, which is what makes a duplicated Tick harmless (motion_peak would otherwise reset to QUIET and drop a pending transition). The ticker must emit strictly increasing instants and the first Tick must be later than the `initial_state` instant.
+- `DeliveryResult(delivered=False)` clears the ledger entry only when `capabilities.push` is true. With push disabled, `LogOnly` fails every delivery, and clearing would re-fire every second and write an `AlertSent` row per second. With push off the cooldown stands, so the log shows one undelivered row per cooldown.
+- `head_left_for_s` is `state.at - head_left_since`, wall time since the first LEFT reading, as long as every confident check since said LEFT. It is not the time between the first and the latest confirming check, so with 60 s periodic checks the alert fires at about 121 s rather than 180 s.
+- The first Tick after startup schedules a PERIODIC vision check (no attempt yet, so the period has elapsed). `VisionTrack` fields got defaults so `VisionTrack()` is the empty track.
+- `Settings` uses `extra="ignore"` so unrelated variables in `.env` do not fail startup. `pushover.user_keys` and `camera.motion_roi` parse comma-separated strings (`u1,u2`, `x,y,w,h`) instead of JSON. `python-dotenv` is a direct dependency: the `ANTHROPIC_API_KEY` alias is a settings source placed below env and dotenv, so an explicit `BABYMON_VISION__API_KEY` wins.
+- `config.load` reports a missing required group (the whole camera block) as each variable the group needs, not as `BABYMON_CAMERA`.
+- `notify.run_alerter` publishes a `DeliveryResult` fact after each attempt (docstring only; body is still the sketch).
+
 ## Open questions and risks
 
 - Is "head to the left" the baby's left or the image's left? The sketch assumes the baby's left and the prompt will say so. The reference image should be taken with the head in the allowed position so the model can compare.
