@@ -150,6 +150,8 @@ Rejected:
 - `Settings` uses `extra="ignore"` so unrelated variables in `.env` do not fail startup. `pushover.user_keys` and `camera.motion_roi` parse comma-separated strings (`u1,u2`, `x,y,w,h`) instead of JSON. `python-dotenv` is a direct dependency: the `ANTHROPIC_API_KEY` alias is a settings source placed below env and dotenv, so an explicit `BABYMON_VISION__API_KEY` wins.
 - `config.load` reports a missing required group (the whole camera block) as each variable the group needs, not as `BABYMON_CAMERA`.
 - `notify.run_alerter` publishes a `DeliveryResult` fact after each attempt (docstring only; body is still the sketch).
+- `WebDeps` gained a defaulted `now: Callable[[], Instant]` so route windows and the `SetControls` timestamp are testable without a clock patch (`web.py`). Callers that pass the four sketch fields are unaffected.
+- `babymon probe alert --priority` takes `normal|high|emergency`, not `-2..2`, and `run` gained `--record-facts FILE` (`__main__.py`). The sketch's `app.run(settings, initial_controls)` becomes `app.run(settings, initial_controls, record_facts)`, and a new `babymon reference` verb needs `camera.grab_still(settings) -> Still`. The JSONL layout is documented in `factlog.py`.
 
 ## Open questions and risks
 
