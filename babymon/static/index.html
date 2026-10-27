@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>babymon</title>
+<style>
+  :root { --asleep:#2f6fdb; --stirring:#e0b341; --awake:#e07b2f; --crying:#d2392f; --unknown:#8a8f98; }
+  * { box-sizing: border-box; }
+  body { font: 16px/1.4 system-ui, sans-serif; margin: 0 auto; max-width: 720px; padding: 8px;
+         background: #14161a; color: #e8e9ec; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: #9aa0aa; margin: 20px 0 6px; }
+  .banner { background: #7a2a24; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
+  .banner.warn { background: #6b5a1d; }
+  #frame { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; display: block; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 8px; }
+  #sleep { font-size: 28px; font-weight: 600; }
+  label { display: flex; gap: 6px; align-items: center; }
+  input[type=checkbox] { width: 22px; height: 22px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 0; background: #2b3039; color: inherit; }
+  #bar { position: relative; height: 28px; background: #2b3039; border-radius: 4px; overflow: hidden; }
+  #bar div { position: absolute; top: 0; bottom: 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid #262a31; }
+  li img { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; background: #000; }
+  li .spacer { width: 96px; flex: none; }
+  li time { color: #9aa0aa; font-size: 13px; }
+  a { color: #7fb2ff; }
+</style>
+</head>
+<body>
+<div id="banners"></div>
+<img id="frame" alt="latest frame">
+<div class="row">
+  <span id="sleep">...</span>
+  <span id="held"></span>
+</div>
+<div class="row">
+  <label><input type="checkbox" id="armed"> Armed</label>
+  <label><input type="checkbox" id="nap_mode"> Nap mode</label>
+  <button id="reference">Set reference</button>
+  <span id="note"></span>
+</div>
+<h2>Last 24 hours</h2>
+<div id="bar"></div>
+<div class="legend" id="legend"></div>
+<h2>Events</h2>
+<ul id="events"></ul>
+<script>
+const COLORS = {asleep:'var(--asleep)', stirring:'var(--stirring)', awake:'var(--awake)',
+                crying:'var(--crying)', unknown:'var(--unknown)'};
+const HOURS = 24;
+const $ = id => document.getElementById(id);
+let holdControlsUntil = 0;
+
+const get = async path => {
+  const r = await fetch(path, {cache: 'no-store'});
+  if (!r.ok) throw new Error(path + ' ' + r.status);
+  return r.json();
+};
+const post = (path, body) => fetch(path, {method: 'POST', headers: {'content-type': 'application/json'},
+                                          body: JSON.stringify(body)});
+
+function duration(s) {
+  s = Math.round(s);
+  if (s < 90) return s + ' s';
+  if (s < 5400) return Math.round(s / 60) + ' min';
+  return (s / 3600).toFixed(1) + ' h';
+}
+const clock = iso => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+function banners(list) {
+  $('banners').replaceChildren(...list.map(([cls, text]) => {
+    const d = document.createElement('div');
+    d.className = 'banner ' + cls;
+    d.textContent = text;
+    return d;
+  }));
+}
+
+async function refreshState() {
+  let s;
+  try { s = await get('/api/state'); } catch { banners([['', 'No state yet: the service is starting or down.']]); return; }
+  const list = [];
+  if (!s.camera_up) list.push(['', 'Camera is down for ' + duration(s.camera_down_for_s) + '.']);
+  if (!s.capabilities.vision) list.push(['warn', 'Vision is disabled: no Anthropic key. Position alerts are off.']);
+  if (!s.capabilities.push) list.push(['warn', 'Push is disabled: alerts are logged, not delivered.']);
+  banners(list);
+  $('sleep').textContent = s.sleep;
+  $('sleep').style.color = COLORS[s.sleep];
+  $('held').textContent = 'for ' + duration(s.sleep_for_s);
+  if (Date.now() > holdControlsUntil) {
+    $('armed').checked = s.controls.armed;
+    $('nap_mode').checked = s.controls.nap_mode;
+  }
+}
+
+function refreshFrame() {
+  $('frame').src = '/api/frame.jpg?t=' + Date.now();
+}
+
+function describe(e) {
+  const x = e.event;
+  switch (x.type) {
+    case 'sleep_changed': return x.previous + ' to ' + x.current;
+    case 'vision': {
+      const o = x.observation;
+      return [o.body, 'head ' + o.head, 'eyes ' + o.eyes, o.face_covered ? 'FACE COVERED' : '',
+              o.in_crib ? '' : 'out of crib'].filter(Boolean).join(', ');
+    }
+    case 'alert': return x.alert.priority.toUpperCase() + ' ' + x.alert.title + (x.delivered ? '' : ' (not delivered)');
+    case 'controls': return 'armed ' + x.controls.armed + ', nap mode ' + x.controls.nap_mode;
+    case 'camera': return 'camera ' + (x.up ? 'up' : 'down') + (x.detail ? ': ' + x.detail : '');
+  }
+  return x.type;
+}
+
+async function refreshEvents() {
+  const events = await get('/api/events?hours=' + HOURS);
+  $('events').replaceChildren(...events.map(e => {
+    const li = document.createElement('li');
+    if (e.snapshot_url) {
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.src = e.snapshot_url;
+      li.append(img);
+    } else {
+      const s = document.createElement('span');
+      s.className = 'spacer';
+      li.append(s);
+    }
+    const body = document.createElement('div');
+    const t = document.createElement('time');
+    t.textContent = clock(e.event.at);
+    body.append(t, document.createElement('br'), describe(e));
+    if (e.clip_url) {
+      const a = document.createElement('a');
+      a.href = e.clip_url;
+      a.target = '_blank';
+      a.textContent = ' clip';
+      body.append(a);
+    }
+    li.append(body);
+    return li;
+  }));
+}
+
+async function refreshTimeline() {
+  const spans = await get('/api/timeline?hours=' + HOURS);
+  const end = Date.now(), start = end - HOURS * 3600e3;
+  $('bar').replaceChildren(...spans.map(sp => {
+    const d = document.createElement('div');
+    const a = Math.max(Date.parse(sp.start), start), b = Math.min(Date.parse(sp.end), end);
+    d.style.left = (100 * (a - start) / (end - start)) + '%';
+    d.style.width = Math.max(0, 100 * (b - a) / (end - start)) + '%';
+    d.style.background = COLORS[sp.state || 'unknown'];
+    d.title = (sp.state || 'unknown') + ' ' + clock(sp.start) + ' to ' + clock(sp.end);
+    return d;
+  }));
+}
+
+for (const [name, color] of Object.entries(COLORS)) {
+  const s = document.createElement('span');
+  const i = document.createElement('i');
+  i.style.background = color;
+  s.append(i, name);
+  $('legend').append(s);
+}
+
+for (const key of ['armed', 'nap_mode']) {
+  $(key).addEventListener('change', async ev => {
+    holdControlsUntil = Date.now() + 3000;
+    await post('/api/controls', {[key]: ev.target.checked});
+    setTimeout(refreshState, 1500);
+  });
+}
+
+$('reference').addEventListener('click', async () => {
+  const r = await post('/api/reference', {});
+  $('note').textContent = r.ok ? 'Reference saved.' : 'No frame to save (' + r.status + ').';
+  setTimeout(() => { $('note').textContent = ''; }, 4000);
+});
+
+const guarded = fn => () => fn().catch(() => {});
+setInterval(refreshFrame, 2000);
+setInterval(guarded(refreshState), 2000);
+setInterval(guarded(refreshEvents), 30000);
+setInterval(guarded(refreshTimeline), 30000);
+refreshFrame();
+for (const fn of [refreshState, refreshEvents, refreshTimeline]) guarded(fn)();
+</script>
+</body>
+</html>
