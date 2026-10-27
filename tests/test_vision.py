@@ -269,10 +269,15 @@ class Harness:
         )
 
     async def settle(self, until=None) -> None:
-        for _ in range(200):
-            await asyncio.sleep(0)
-            if until and until():
+        """Worker threads run in real time, so wait on the condition, not on loop turns."""
+        if until is None:
+            await asyncio.sleep(0.1)
+            return
+        for _ in range(1000):
+            if until():
                 return
+            await asyncio.sleep(0.005)
+        raise AssertionError("condition not reached")
 
     async def close(self) -> None:
         self.task.cancel()
