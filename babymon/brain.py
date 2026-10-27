@@ -29,6 +29,7 @@ from babymon.domain import (
     Notify,
     Observation,
     Priority,
+    Restored,
     Situation,
     SleepState,
     Tuning,
@@ -53,16 +54,6 @@ ALERT_POLICY: Mapping[AlertKind, AlertPolicy] = {
 }
 if set(ALERT_POLICY) != set(AlertKind):
     raise RuntimeError("ALERT_POLICY must cover every AlertKind")
-
-
-@dataclass(frozen=True, slots=True)
-class Restored:
-    """What the store hands back on startup. Everything else starts fresh."""
-
-    controls: Controls
-    sleep: tuple[SleepState, Instant] | None
-    delivered: Mapping[AlertKind, Instant]
-    """Last *delivered* alert per kind, within the cooldown horizon."""
 
 
 @dataclass(frozen=True, slots=True)

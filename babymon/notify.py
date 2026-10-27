@@ -24,8 +24,9 @@ class DeliveryError(Exception):
 class Pushover:
     """POST https://api.pushover.net/1/messages.json, multipart, once per user key.
 
-    Priority.EMERGENCY adds retry=emergency_retry_s (30) and expire=emergency_expire_s
-    (600); the domain never sees those fields. Snapshot goes as `attachment`.
+    Priority maps to Pushover's scale (NORMAL 0, HIGH 1, EMERGENCY 2). EMERGENCY adds
+    retry=emergency_retry_s (30) and expire=emergency_expire_s (600); the domain never
+    sees those fields. Snapshot goes as `attachment`.
     Transport errors retry with backoff for up to 60 s per alert.
     """
 
@@ -60,7 +61,8 @@ async def run_alerter(
         snapshot = store.save_snapshot(still, label=alert.kind) if still
         try deliver -> delivered=True; except DeliveryError -> delivered=False
         store.append(AlertSent(at=alert.at, alert, snapshot, delivered, detail))
+        publish(DeliveryResult(at=now, kind=alert.kind, delivered))
     The row is written after the attempt so cooldown recovery counts only alerts that
-    reached a phone.
+    reached a phone. DeliveryResult tells the brain the same thing in-process.
     """
     raise NotImplementedError

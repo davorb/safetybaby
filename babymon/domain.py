@@ -18,9 +18,10 @@ read the bytes) and trusted everywhere inside.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from enum import IntEnum, StrEnum
+from enum import StrEnum
 from typing import Annotated, Literal, NewType
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -117,14 +118,13 @@ class AlertKind(StrEnum):
     CAMERA_OFFLINE = "camera_offline"
 
 
-class Priority(IntEnum):
-    """Pushover priorities. EMERGENCY implies retry/expire, which notify.py owns."""
+class Priority(StrEnum):
+    """How loud an alert is. notify.py maps this to the transport's own scale and adds
+    retry/expire for EMERGENCY; the domain never sees transport parameters."""
 
-    LOWEST = -2
-    LOW = -1
-    NORMAL = 0
-    HIGH = 1
-    EMERGENCY = 2
+    NORMAL = "normal"
+    HIGH = "high"
+    EMERGENCY = "emergency"
 
 
 class Tuning(Frozen):
@@ -189,6 +189,16 @@ class Alert(Frozen):
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class Restored:
+    """What the store hands back on startup. Everything else starts fresh."""
+
+    controls: Controls
+    sleep: tuple[SleepState, Instant] | None
+    delivered: Mapping[AlertKind, Instant]
+    """Last *delivered* alert per kind, within the cooldown horizon."""
+
+
 # ---------------------------------------------------------------- media payloads
 
 
@@ -250,6 +260,17 @@ class SetControls:
 
 
 @dataclass(frozen=True, slots=True)
+class DeliveryResult:
+    """The alerter's report on one Notify. delivered=False clears the kind's cooldown so
+    the next Tick re-fires instead of waiting it out; the store's restore does the same
+    for a crash between deciding and delivering."""
+
+    at: Instant
+    kind: AlertKind
+    delivered: bool
+
+
+@dataclass(frozen=True, slots=True)
 class Tick:
     """1 Hz heartbeat. The only fact that advances time-based rules, so a silent camera
     still produces CAMERA_OFFLINE instead of freezing the brain."""
@@ -257,7 +278,16 @@ class Tick:
     at: Instant
 
 
-type Fact = MotionSample | AudioSample | VisionDone | VisionFailed | CameraStatus | SetControls | Tick
+type Fact = (
+    MotionSample
+    | AudioSample
+    | VisionDone
+    | VisionFailed
+    | CameraStatus
+    | SetControls
+    | DeliveryResult
+    | Tick
+)
 
 
 # ---------------------------------------------------------------- events (persisted)
