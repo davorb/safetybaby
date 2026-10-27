@@ -1,5 +1,4 @@
 #!/bin/sh
-# Download the YAMNet ONNX model and its class map into models/.
 set -eu
 base=https://huggingface.co/audiomagic/yamnet-onnx/resolve/main
 dir="$(dirname "$0")/../models"

@@ -150,9 +150,6 @@ def split_jpegs(buffer: bytearray) -> list[bytes]:
         del buffer[: end + 2]
 
 
-# ------------------------------------------------------------------ supervision
-
-
 async def supervise(
     attempt: Callable[[Callable[[], None]], Awaitable[str]],
     on_status: Callable[[bool, str], None],
@@ -262,9 +259,6 @@ async def exit_detail(
         await asyncio.wait_for(drain, 1.0)
     code = f"exit code {proc.returncode}"
     return f"{last.text} ({code})" if last.text else f"ffmpeg exited, {code}"
-
-
-# ------------------------------------------------------------------ the camera actor
 
 
 async def _open_reader(fd: int) -> tuple[asyncio.StreamReader, asyncio.ReadTransport]:

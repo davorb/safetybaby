@@ -12,7 +12,6 @@ ENV UV_COMPILE_BYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     TZ=UTC
 
-# Dependencies first so a source edit does not reinstall them.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 

@@ -43,9 +43,6 @@ def gray(fill: int = 0, block: tuple[int, int, int, int] | None = None, value: i
     return frame
 
 
-# ------------------------------------------------------------------ pure helpers
-
-
 def test_ffmpeg_argv_names_one_pipe_per_output_and_nothing_for_recording():
     argv = ffmpeg_argv(CFG, SessionFds(frames=11, pcm=12, stills=13))
     joined = " ".join(argv)
@@ -116,9 +113,6 @@ def test_redact_removes_url_credentials_and_a_bare_password():
     assert "refused" in cleaned
 
 
-# ------------------------------------------------------------------ supervisor
-
-
 async def test_supervisor_backs_off_per_failure_and_resets_after_a_healthy_run(monkeypatch):
     delays: list[float] = []
     real_sleep = asyncio.sleep
@@ -145,9 +139,6 @@ async def test_supervisor_backs_off_per_failure_and_resets_after_a_healthy_run(m
     assert delays[:5] == [1.0, 2.0, 5.0, 10.0, 30.0]
     assert delays[5:] == [1.0]
     assert statuses[-1] == (False, "run 6")
-
-
-# ------------------------------------------------------------------ against a stub ffmpeg
 
 
 @pytest.fixture

@@ -25,8 +25,6 @@ class Latest[T]:
         """Replace the value and bump the version. Never blocks."""
         self._value = value
         self._version += 1
-        # Wake every current waiter, then hand later waiters a fresh event. Waiters
-        # captured the old event before sleeping, so none can miss this set.
         self._changed.set()
         self._changed = asyncio.Event()
 

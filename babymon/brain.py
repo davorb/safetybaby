@@ -208,8 +208,6 @@ def observe(
             event = ControlsChanged(at=fact.at, controls=controls)
             return replace(state, controls=controls), (Record(event),)
         case DeliveryResult():
-            # With push disabled nothing can ever deliver, so the cooldown stands and the
-            # log gets one undelivered row per cooldown instead of one per second.
             if fact.delivered or not state.capabilities.push or fact.kind not in state.ledger:
                 return state, ()
             ledger = {k: v for k, v in state.ledger.items() if k != fact.kind}
@@ -273,7 +271,6 @@ def _schedule_vision(
         period = tuning.vision_period_quiet_s
     if since_last >= period:
         reason = VisionReason.CONFIRM if confirming else VisionReason.PERIODIC
-    # Checking when motion ends sees the new resting position instead of motion blur.
     elif (
         state.last_signal in (Signal.MOVING, Signal.ACTIVE)
         and signal is Signal.QUIET

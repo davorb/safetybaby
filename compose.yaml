@@ -3,8 +3,6 @@ services:
     build: .
     image: babymon
     env_file: .env
-    # The container's own paths win over any BABYMON_DATA_DIR or BABYMON_YAMNET_PATH
-    # in .env, which usually point at the checkout for `uv run`.
     environment:
       BABYMON_DATA_DIR: /data
       BABYMON_YAMNET_PATH: /models/yamnet.onnx

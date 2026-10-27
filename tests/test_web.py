@@ -87,7 +87,7 @@ class Rig:
 
     @property
     def client(self) -> TestClient:
-        deps = WebDeps(self.published.append, self.situation, self.stills, self.store, lambda: NOW)  # type: ignore[arg-type]
+        deps = WebDeps(self.published.append, self.situation, self.stills, self.store, lambda: NOW)
         return TestClient(create_app(deps))
 
 

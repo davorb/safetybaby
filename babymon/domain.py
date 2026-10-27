@@ -37,9 +37,6 @@ class Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-# ---------------------------------------------------------------- vision vocabulary
-
-
 class BodyPosition(StrEnum):
     BACK = "back"
     SIDE_LEFT = "side_left"
@@ -79,9 +76,6 @@ class VisionReason(StrEnum):
     SETTLED_AFTER_MOTION = "settled_after_motion"
     CONFIRM = "confirm"
     """A follow-up check scheduled early because a dangerous reading is pending."""
-
-
-# ---------------------------------------------------------------- sleep, controls, alerts
 
 
 class SleepState(StrEnum):
@@ -130,13 +124,11 @@ class Priority(StrEnum):
 class Tuning(Frozen):
     """Every threshold the pure core reads. Built from Settings at the boundary."""
 
-    # alert rules
     unsafe_streak: int = 2
     head_left_alert_s: float = 120.0
     crying_alert_s: float = 60.0
     camera_offline_alert_s: float = 60.0
     min_confidence: float = 0.5
-    # vision scheduling
     vision_period_s: float = 60.0
     vision_period_quiet_s: float = 900.0
     """Periodic interval when no motion was seen since the last attempt: a floor so an
@@ -145,11 +137,9 @@ class Tuning(Frozen):
     vision_min_spacing_s: float = 10.0
     vision_timeout_s: float = 45.0
     observation_fresh_s: float = 90.0
-    # sleep evidence
     motion_moving: float = 0.02
     motion_active: float = 0.08
     cry_probability: float = 0.6
-    # cooldown
     alert_cooldown_s: float = 600.0
 
 
@@ -202,18 +192,12 @@ class Restored:
     """Last *delivered* alert per kind, within the cooldown horizon."""
 
 
-# ---------------------------------------------------------------- media payloads
-
-
 @dataclass(frozen=True, slots=True)
 class Still:
     """One JPEG frame (1280x720) as ffmpeg encoded it. Shared by reference, never mutated."""
 
     jpeg: bytes
     at: Instant
-
-
-# ---------------------------------------------------------------- facts (actors -> brain)
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,9 +277,6 @@ type Fact = (
 )
 
 
-# ---------------------------------------------------------------- events (persisted)
-
-
 class SleepChanged(Frozen):
     type: Literal["sleep_changed"] = "sleep_changed"
     at: Instant
@@ -340,9 +321,6 @@ type Event = Annotated[
     SleepChanged | VisionObserved | AlertSent | ControlsChanged | CameraChanged,
     Field(discriminator="type"),
 ]
-
-
-# ---------------------------------------------------------------- effects (brain -> shell)
 
 
 @dataclass(frozen=True, slots=True)

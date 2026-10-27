@@ -197,8 +197,6 @@ class Store:
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._db, timeout=10.0)
 
-    # -- writes
-
     def append(self, event: Event) -> None:
         """A ControlsChanged event also upserts the controls row in the same transaction,
         so controls cannot drift from the log."""
@@ -250,8 +248,6 @@ class Store:
         with closing(self._connect()) as conn, conn:
             events = conn.execute("DELETE FROM events WHERE at_us < ?", (_us(horizon),)).rowcount
         return SweepReport(len(expired_segments), len(expired_snapshots), events)
-
-    # -- reads
 
     def restore(self, now: Instant, cooldown_s: float) -> Restored:
         """Controls row (defaults if none), last SleepChanged if within 10 min, and the
