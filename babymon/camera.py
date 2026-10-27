@@ -21,17 +21,19 @@ import logging
 import os
 import re
 import signal
+import tempfile
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Never
 
 import cv2
 import numpy as np
 import numpy.typing as npt
 
-from babymon.config import CameraConfig
+from babymon.config import CameraConfig, Settings
 from babymon.domain import CameraStatus, Fact, Instant, MotionSample, Still
 from babymon.latest import Latest
 
@@ -403,6 +405,46 @@ class CameraProbe:
             f"motion mean {mean:.4f} peak {peak:.4f}, "
             f"status changes: {[(s.up, s.detail) for s in self.statuses]}"
         )
+
+
+GRAB_TIMEOUT_S = 30.0
+
+
+async def grab_still(settings: Settings, timeout_s: float = GRAB_TIMEOUT_S) -> Still:
+    """One fresh 1280x720 frame from a short-lived camera session."""
+    out = CameraOutputs(publish=lambda fact: None, stills=Latest(), pcm=Latest())
+    task = asyncio.create_task(Camera(settings.camera).run(out))
+    try:
+        async with asyncio.timeout(timeout_s):
+            _, still = await out.stills.newer_than(0)
+    except TimeoutError:
+        raise SystemExit(f"camera: no frame within {timeout_s:.0f} s") from None
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    return still
+
+
+async def probe(settings: Settings, seconds: float) -> None:
+    """`babymon probe camera --seconds N`: the camera actor and a recorder, side by
+    side, into a temporary segment directory. Prints rates, motion and the segments."""
+    from babymon.recorder import Recorder
+
+    with tempfile.TemporaryDirectory(prefix="babymon-probe-") as tmp:
+        segment_dir = Path(tmp)
+        recorder = asyncio.create_task(Recorder(settings.camera).run(segment_dir))
+        try:
+            report = await probe_camera(settings.camera, seconds)
+            segments = sorted(segment_dir.glob("*.mp4"))
+            print(report.summary())
+            for path in segments:
+                print(f"segment {path.name}: {path.stat().st_size} bytes")
+        finally:
+            recorder.cancel()
+            await asyncio.gather(recorder, return_exceptions=True)
+    if report.frames == 0:
+        last = report.statuses[-1].detail if report.statuses else "no status reported"
+        raise SystemExit(f"camera probe: no frames in {seconds:.0f} s: {last}")
 
 
 async def probe_camera(cfg: CameraConfig, seconds: float) -> CameraProbe:

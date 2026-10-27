@@ -19,6 +19,7 @@ import numpy.typing as npt
 import onnxruntime as ort
 
 from babymon.camera import PcmWindow
+from babymon.config import Settings
 from babymon.domain import AudioSample, Fact
 from babymon.latest import Latest
 
@@ -95,6 +96,20 @@ def probe_audio(
         )
         for second in (samples[i : i + 16_000] for i in range(0, len(samples) - 15_999, 16_000))
     ]
+
+
+async def probe(settings: Settings, path: Path) -> None:
+    """`babymon probe audio FILE.wav`: one line per whole second of the clip."""
+    if not settings.yamnet_path.is_file():
+        raise SystemExit(f"no YAMNet model at {settings.yamnet_path} (run scripts/fetch-yamnet.sh)")
+    try:
+        samples = load_clip(path)
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(f"ffmpeg could not decode {path}: {e.stderr.decode().strip()}") from None
+    rows = probe_audio(samples, YamnetClassifier(settings.yamnet_path))
+    print("second  loudness_db  p_cry")
+    for second, (loudness, cry) in enumerate(rows):
+        print(f"{second:6d}  {loudness:11.1f}  {cry:5.2f}")
 
 
 def load_clip(path: Path) -> npt.NDArray[np.float32]:
