@@ -59,7 +59,7 @@ class CameraConfig(BaseModel, frozen=True):
 
 class VisionConfig(BaseModel, frozen=True):
     api_key: SecretStr
-    model: str = "claude-opus-5-5"
+    model: str = "claude-haiku-5-5"
 
 
 class PushoverConfig(BaseModel, frozen=True):
