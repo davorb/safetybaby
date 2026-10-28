@@ -8,4 +8,4 @@ models/*.onnx
 .ruff_cache/
 models/yamnet_class_map.csv
 data/
-models/
+models/.dev/
