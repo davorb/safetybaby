@@ -14,6 +14,7 @@ Store. No route touches MonitorState.
     GET  /api/stats?days=7&tz=UTC  Stats over the last `days` (1..90), local-time fields
                                  in the IANA zone `tz` (400 if unknown)
     GET  /stats                  single HTML page, reads /api/stats
+    GET  /static/{name}          the shared base.css and tip.js, plain .css/.js names only
     POST /api/controls           {"armed"?: bool, "nap_mode"?: bool}
     POST /api/reference          store the current Still as the good-position reference
     GET  /media/snapshots/{name}, /media/segments/{name}
@@ -50,6 +51,8 @@ from babymon.store import Store
 
 INDEX = Path(__file__).parent / "static" / "index.html"
 STATS_PAGE = Path(__file__).parent / "static" / "stats.html"
+ASSETS = Path(__file__).parent / "static"
+ASSET_SUFFIXES = {".css", ".js"}
 NO_STORE = {"Cache-Control": "no-store"}
 Hours = Annotated[float, Query(gt=0, le=24)]
 Days = Annotated[int, Query(ge=1, le=90)]
@@ -96,6 +99,12 @@ def _media(resolve: Callable[[str], Path], name: str) -> FileResponse:
     return FileResponse(path)
 
 
+def _asset(name: str) -> Path:
+    if "/" in name or "\\" in name or Path(name).suffix not in ASSET_SUFFIXES:
+        raise ValueError(name)
+    return ASSETS / name
+
+
 def create_app(deps: WebDeps) -> FastAPI:
     app = FastAPI(title="babymon", docs_url=None, redoc_url=None, openapi_url=None)
     store = deps.store
@@ -107,6 +116,10 @@ def create_app(deps: WebDeps) -> FastAPI:
     @app.get("/stats", response_class=HTMLResponse)
     def stats_page() -> str:
         return STATS_PAGE.read_text()
+
+    @app.get("/static/{name}")
+    def static_asset(name: str) -> FileResponse:
+        return _media(_asset, name)
 
     @app.get("/api/state")
     def state() -> Situation:

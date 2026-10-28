@@ -310,6 +310,19 @@ class TestStats:
     def test_days_outside_one_to_ninety_is_a_422(self, client, days):
         assert client.get("/api/stats", params={"days": days}).status_code == 422
 
+    def test_pages_and_shared_assets_are_served(self, client):
+        assert client.get("/stats").status_code == 200
+        css = client.get("/static/base.css")
+        assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
+        assert "function showTip" in client.get("/static/tip.js").text
+
+    @pytest.mark.parametrize(
+        "name",
+        ["..%2Fweb.py", "%2e%2e/web.py", "stats.html", "..%5Cweb.py", "missing.css", ".css"],
+    )
+    def test_static_serves_only_plain_asset_names(self, client, name):
+        assert client.get(f"/static/{name}").status_code == 404
+
     def test_the_page_is_served_and_minutes_stay_out_of_events(self, client):
         assert client.get("/stats").status_code == 200
         assert all(e["event"]["type"] != "minute" for e in client.get("/api/events").json())
