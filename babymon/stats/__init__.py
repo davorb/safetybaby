@@ -6,6 +6,8 @@ hands them to the block functions, so every block agrees on what "known time" me
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from babymon.domain import Tuning
 from babymon.stats import clock, sleep_blocks, timeline
 from babymon.stats import signal_blocks as sig
@@ -66,11 +68,15 @@ def _coverage(ctx: Context, camera: timeline.CameraTimeline, days: list[DayRow])
         camera_up_s=sum((hi - lo).total_seconds() for lo, hi in camera.up),
         camera_down_s=sum((hi - lo).total_seconds() for lo, hi in camera.down),
         camera_unknown_s=sum((hi - lo).total_seconds() for lo, hi in camera.unknown),
-        process_gap_s=sum((hi - lo).total_seconds() for lo, hi in ctx.gaps),
+        process_gap_s=_seconds(p for g in ctx.gaps for p in timeline.subtract(*g, camera.down)),
         fraction_covered=known / window if window else 0.0,
         days_with_data=sum(r.covered_s > 0 for r in days),
         minutes_with_data=len(inp.minutes),
     )
+
+
+def _seconds(intervals: Iterable[timeline.Interval]) -> float:
+    return sum((hi - lo).total_seconds() for lo, hi in intervals)
 
 
 def _tuning_echo(tuning: Tuning) -> TuningEcho:
