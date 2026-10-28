@@ -190,6 +190,15 @@ def test_events_are_newest_first_with_snapshot_and_clip_urls(rig):
     assert by_id[1]["clip_url"] == "/media/segments/20261027-020000.mp4#t=12.5"
 
 
+def test_since_id_keeps_only_newer_events(rig):
+    rig.store.stored = [
+        StoredEvent(i, CameraChanged(at=at(i * 10), up=True, detail="")) for i in (1, 2, 3)
+    ]
+    assert [e["id"] for e in rig.client.get("/api/events?since_id=1").json()] == [3, 2]
+    assert rig.client.get("/api/events?since_id=3").json() == []
+    assert rig.client.get("/api/events?since_id=-1").status_code == 422
+
+
 def test_event_without_a_covering_segment_has_no_clip_url(rig):
     rig.store.stored = [StoredEvent(1, CameraChanged(at=at(5), up=True, detail=""))]
     assert rig.client.get("/api/events").json()[0]["clip_url"] is None
