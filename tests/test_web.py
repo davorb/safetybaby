@@ -16,6 +16,7 @@ from babymon.domain import (
     AlertSent,
     CameraChanged,
     Fact,
+    MinuteRollup,
     Priority,
     SetControls,
     Situation,
@@ -27,7 +28,7 @@ from babymon.domain import (
     VisionReason,
 )
 from babymon.latest import Latest
-from babymon.store import Clip, SleepSpan, StoredEvent
+from babymon.store import Clip, SleepSpan, Store, StoredEvent
 from babymon.web import INDEX, WebDeps, create_app
 from tests.conftest import T0, Run, at, observation, start
 
@@ -261,3 +262,67 @@ def test_segment_supports_range_requests(rig):
     assert (tail.status_code, tail.content) == (206, SEGMENT[1000:])
     past_end = c.get("/media/segments/s.mp4", headers={"Range": "bytes=5000-"})
     assert past_end.status_code == 416
+
+
+class TestStats:
+    @pytest.fixture
+    def client(self, tmp_path) -> TestClient:
+        store = Store.open(tmp_path)
+        store.append(
+            SleepChanged(
+                at=NOW - timedelta(hours=3), previous=SleepState.AWAKE, current=SleepState.ASLEEP
+            )
+        )
+        store.append(
+            SleepChanged(
+                at=NOW - timedelta(hours=1), previous=SleepState.ASLEEP, current=SleepState.CRYING
+            )
+        )
+        store.append_minute(
+            MinuteRollup(NOW - timedelta(minutes=1), 240, 0.01, 0.05, 60, 2.0, 5.0, 0.1, 0)
+        )
+        deps = WebDeps(lambda f: None, Latest(), Latest(), store, lambda: NOW)
+        return TestClient(create_app(deps))
+
+    def test_shape_and_denominators(self, client):
+        body = client.get("/api/stats?days=2&tz=Europe/Stockholm").json()
+
+        assert body["window_days"] == 2
+        assert body["coverage"]["tz"] == "Europe/Stockholm"
+        assert body["coverage"]["window_s"] == 2 * 86400
+        assert body["coverage"]["minutes_with_data"] == 1
+        assert body["bouts"]["n"] == 1 and body["bouts"]["n_censored"] == 1
+        assert {t["state"]: t["seconds"] for t in body["state_totals"]}["crying"] == 3600
+        assert body["tuning"]["motion_moving"] == 0.02
+        assert len(body["circadian"]["hours"]) == 24
+        assert body["circadian"]["actogram"]["days"][0]["slots"][0].keys() >= {"state", "known_s"}
+
+    def test_defaults_are_seven_days_in_utc(self, client):
+        body = client.get("/api/stats").json()
+
+        assert (body["window_days"], body["coverage"]["tz"]) == (7, "UTC")
+
+    @pytest.mark.parametrize("tz", ["Mars/Olympus", "", "../etc/passwd", "UTC+3"])
+    def test_unknown_time_zone_is_a_400(self, client, tz):
+        assert client.get("/api/stats", params={"tz": tz}).status_code == 400
+
+    @pytest.mark.parametrize("days", [0, 91, -1, "x"])
+    def test_days_outside_one_to_ninety_is_a_422(self, client, days):
+        assert client.get("/api/stats", params={"days": days}).status_code == 422
+
+    def test_pages_and_shared_assets_are_served(self, client):
+        assert client.get("/stats").status_code == 200
+        css = client.get("/static/base.css")
+        assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
+        assert "function showTip" in client.get("/static/tip.js").text
+
+    @pytest.mark.parametrize(
+        "name",
+        ["..%2Fweb.py", "%2e%2e/web.py", "stats.html", "..%5Cweb.py", "missing.css", ".css"],
+    )
+    def test_static_serves_only_plain_asset_names(self, client, name):
+        assert client.get(f"/static/{name}").status_code == 404
+
+    def test_the_page_is_served_and_minutes_stay_out_of_events(self, client):
+        assert client.get("/stats").status_code == 200
+        assert all(e["event"]["type"] != "minute" for e in client.get("/api/events").json())

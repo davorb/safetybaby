@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0d16">
+<title>babymon statistics</title>
+<link rel="stylesheet" href="/static/base.css">
+<style>
+  :root { --page-max: 1180px; --teal: #5ad0c0; --violet: #9678ff; --pink: #ff8fb1; --nap: #8fe0d0; }
+  header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin: 4px 0 14px; }
+  header.top h1 { font-size: 22px; font-weight: 650; letter-spacing: .01em; margin: 0 auto 0 0; }
+  .range { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(0,0,0,.28); border: 1px solid var(--edge-soft); }
+  .range button { border: 0; background: transparent; padding: 7px 14px; min-height: 36px; border-radius: 999px; font-size: 14px;
+                  font-weight: 550; color: var(--muted); cursor: pointer; }
+  .range button[aria-pressed=true] { background: rgba(var(--accent-rgb), .28); color: var(--text);
+                                     box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .5); }
+  .range button:focus-visible { outline: 2px solid rgba(var(--accent-rgb), .8); outline-offset: 1px; }
+
+  .grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .grid > .card { margin: 0; min-width: 0; }
+  @media (min-width: 1000px) {
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid > .wide { grid-column: 1 / -1; }
+  }
+  #banners { display: grid; gap: 8px; margin-bottom: 14px; }
+  #banners:empty { display: none; }
+  .banner { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 16px; color: #f4dcd9;
+            background: rgba(var(--crying-rgb), .16); border: 1px solid rgba(var(--crying-rgb), .4); }
+  .banner .btn { margin-left: auto; padding: 5px 12px; }
+  main[aria-busy=true] .grid { opacity: .55; transition: opacity .2s; }
+
+  .meta { margin: -4px 2px 10px; line-height: 1.9; font-size: 13px; color: var(--muted); }
+  .meta b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .few { margin-left: 8px; display: inline-block; line-height: 1.4; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase;
+         color: #f1e8cc; background: rgba(var(--stirring-rgb), .1); border: 1px dashed rgba(var(--stirring-rgb), .75); }
+  .note { color: var(--muted); font-size: 13px; margin: 8px 2px 0; }
+  .reading { font-size: 15px; margin: 4px 2px 10px; }
+  .reading b { font-weight: 650; }
+  .empty { color: var(--muted); text-align: center; padding: 22px 8px; font-size: 14px; }
+
+  .cover-bar { display: flex; height: 22px; border-radius: 8px; overflow: hidden; gap: 2px; background: rgba(0,0,0,.28);
+               border: 1px solid var(--edge-soft); }
+  .cover-bar i { display: block; min-width: 0; }
+  .cover-nums { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 10px; }
+  .cover-nums div { font-size: 13px; color: var(--muted); }
+  .cover-nums b { display: block; font-size: 20px; font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px; }
+  .kpi { padding: 12px; border-radius: 16px; background: rgba(255,255,255,.035); border: 1px solid var(--edge-soft); min-width: 0; }
+  .kpi .lab { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .kpi .val { font-size: 24px; font-weight: 650; margin: 3px 0 2px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .kpi .val small { font-size: 14px; font-weight: 500; color: var(--muted); }
+  .kpi .sub { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 3px 8px; align-items: center; }
+  .kpi.low .val { opacity: .6; }
+
+  svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
+  svg.chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+  svg.chart text.strong { fill: var(--text); }
+  svg.chart text.small { font-size: 10px; }
+  svg.chart .grid-line { stroke: rgba(255,255,255,.07); stroke-width: 1; }
+  svg.chart .hit { fill: transparent; }
+  svg.chart .hit:hover { fill: rgba(255,255,255,.08); }
+  svg.chart [data-tip]:focus-visible { outline: none; }
+  svg.chart [data-tip]:focus-visible.hit { fill: rgba(255,255,255,.12); stroke: rgba(var(--accent-rgb), .9); stroke-width: 1.5; }
+  .pair { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 760px) { .pair { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .sub-h { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 2px 6px; }
+  .pair > div > .sub-h:first-child, .body > .sub-h:first-child { margin-top: 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px 3px 8px; border-radius: 999px;
+                 font-size: 12.5px; background: rgba(255,255,255,.05); border: 1px solid var(--edge-soft); }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .legend i.sq { border-radius: 2px; }
+  .legend i.hatch { background-image: repeating-linear-gradient(45deg, rgba(10,13,22,.65) 0 1.5px, transparent 1.5px 4px); }
+  .legend .ramp { width: 70px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, hsl(172 55% 14%), hsl(172 55% 72%)); }
+
+  .seg { display: inline-flex; padding: 2px; border-radius: 999px; background: rgba(0,0,0,.28); border: 1px solid var(--edge-soft); margin: 0 0 8px; }
+  .seg button { border: 0; background: transparent; padding: 4px 12px; border-radius: 999px; font-size: 13px; color: var(--muted);
+                cursor: pointer; min-height: 30px; }
+  .seg button[aria-pressed=true] { background: rgba(var(--accent-rgb), .28); color: var(--text); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; }
+
+  table.t { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; margin-top: 12px; }
+  table.t th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
+               padding: 4px 6px; border-bottom: 1px solid var(--edge-soft); }
+  table.t td { padding: 6px; border-bottom: 1px solid var(--edge-soft); }
+  table.t td.num, table.t th.num { text-align: right; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; }
+  details { margin-top: 10px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 2px; }
+  details .scroll { overflow-x: auto; }
+
+  .outages { margin-top: 12px; display: grid; gap: 6px; }
+  .outage { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 10px; border-radius: 12px; font-size: 14px;
+            background: rgba(255,255,255,.035); border: 1px solid var(--edge-soft); font-variant-numeric: tabular-nums; }
+  .outage b { margin-left: auto; font-weight: 600; }
+  .badge { padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+           color: #ffd9d5; background: rgba(var(--crying-rgb), .3); border: 1px solid rgba(var(--crying-rgb), .7); }
+</style>
+</head>
+<body>
+<div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="1.6" height="5" fill="rgba(10,13,22,.62)"/>
+    </pattern>
+  </defs>
+</svg>
+
+<header class="top">
+  <h1>Statistics</h1>
+  <div class="range" id="range" role="group" aria-label="Time range">
+    <button type="button" data-r="24h" aria-pressed="false">24 h</button>
+    <button type="button" data-r="7d" aria-pressed="true">7 d</button>
+    <button type="button" data-r="30d" aria-pressed="false">30 d</button>
+    <button type="button" data-r="90d" aria-pressed="false">90 d</button>
+  </div>
+  <a class="btn" href="/">Live</a>
+</header>
+<div id="banners" role="status"></div>
+
+<main id="main" aria-busy="true">
+<div class="grid">
+  <section class="glass card wide" id="c-coverage">
+    <h2>Data coverage <button type="button" class="info" aria-label="About data coverage" data-tipkey="coverage">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card wide" id="c-kpis">
+    <h2>At a glance <button type="button" class="info" aria-label="About the summary tiles" data-tipkey="kpis">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card wide" id="c-daily">
+    <h2>Sleep per day <button type="button" class="info" aria-label="About sleep per day" data-tipkey="daily">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card wide" id="c-actogram">
+    <h2>Day by day <button type="button" class="info" aria-label="About the day by day chart" data-tipkey="actogram">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-circadian">
+    <h2>A typical 24 hours <button type="button" class="info" aria-label="About the 24 hour profile" data-tipkey="circadian">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-crying">
+    <h2>Crying <button type="button" class="info" aria-label="About crying" data-tipkey="crying">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card wide" id="c-bouts">
+    <h2>Sleep stretches <button type="button" class="info" aria-label="About sleep stretches" data-tipkey="bouts">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-transitions">
+    <h2>What follows what <button type="button" class="info" aria-label="About state changes" data-tipkey="transitions">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-alerts">
+    <h2>Alerts <button type="button" class="info" aria-label="About alerts" data-tipkey="alerts">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-vision">
+    <h2>What the camera sees <button type="button" class="info" aria-label="About vision shares" data-tipkey="vision">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-confidence">
+    <h2>Vision confidence <button type="button" class="info" aria-label="About vision confidence" data-tipkey="confidence">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-adult">
+    <h2>Adult visits <button type="button" class="info" aria-label="About adult visits" data-tipkey="adult">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-position">
+    <h2>Position and waking <button type="button" class="info" aria-label="About position and waking" data-tipkey="position">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-signals">
+    <h2>Motion and sound <button type="button" class="info" aria-label="About motion and sound" data-tipkey="signals">i</button></h2>
+    <div class="body"></div>
+  </section>
+  <section class="glass card" id="c-camera">
+    <h2>Camera <button type="button" class="info" aria-label="About the camera" data-tipkey="camera">i</button></h2>
+    <div class="body"></div>
+  </section>
+</div>
+</main>
+
+<div id="tip" role="tooltip"></div>
+<script src="/static/tip.js"></script>
+<script>
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const RANGES = {'24h': 1, '7d': 7, '30d': 30, '90d': 90};
+const STATES = ['asleep', 'stirring', 'awake', 'crying'];
+const NS = 'http://www.w3.org/2000/svg';
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const COLORS = Object.fromEntries([...STATES, 'unknown'].map(s => [s, cssVar('--' + s)]));
+const NAP = cssVar('--nap'), TEAL = cssVar('--teal'), VIOLET = cssVar('--violet'), PINK = cssVar('--pink');
+const ACCENT = `rgb(${cssVar('--accent-rgb')})`;
+
+// Below these counts a number is shown but flagged "few data".
+const MIN = {days: 3, spreadDays: 5, bouts: 10, transitions: 30, exits: 5, cry: 5, vision: 30, rows: 30, minutes: 30, alerts: 5};
+
+const TIPS = {
+  coverage: 'How much of the chosen period the monitor actually has data for.\nCovered: seconds with a known sleep state, as a share of the whole period.\nCamera down: the camera was offline, so nothing was seen.\nProcess gaps: the monitor itself was not running (a restart, a crash or a power cut). That time counts as unknown, never as continued sleep.\nEvery number on this page is computed from covered time only.',
+  kpis: 'The headline numbers, averaged per sleep day. A sleep day runs from 07:00 to 07:00, and the night is 19:00 to 07:00.\nRates are time-weighted: total over total covered time, so a half-covered day does not drag the average down.\nA dashed "few data" tag means the sample is too small to lean on yet.',
+  daily: 'Hours the baby slept in each sleep day (07:00 to 07:00), split into night sleep (19:00 to 07:00) and naps (the rest).\nFaded bars are partial days: the period starts or ends inside them, or the monitor was off for part of the day.\nThe line is the average of the last 7 full days, so one bad night does not dominate. It appears from 7 days of data.',
+  actogram: 'One row per sleep day, one column per half hour from 07:00. Each cell is coloured by the state the baby spent most of that half hour in. Empty cells have no data.\nSwitch to Motion to colour by how much movement the camera saw instead: brighter is more movement.\nTap a cell for its exact values. Stirring cells are hatched so they stay distinguishable from awake.',
+  circadian: 'For each hour of the day, the share of known time the baby spent in each state, added up over every day in the period.\nTall blue means the baby is usually asleep at that hour. Faded columns have under 30 min of data in total.',
+  crying: 'Crying episodes by the hour they started in, over the whole period.\nAn episode is an unbroken run of the crying state. Episodes still going when the data ends are lower bounds and are counted as cut off.',
+  bouts: 'A sleep stretch is one unbroken run of sleep. Waking for under 3 minutes counts as part of the same stretch.\nHistogram: how many stretches lasted how long. Hatched bars are cut off by the start of the period, by missing data, or by now, so they are at least this long.\nSurvival curve (Kaplan-Meier): after falling asleep, the chance the baby is still asleep after a given time. Cut-off stretches are handled properly instead of being counted as short. The shaded band is a 95% confidence interval and the dot marks where the curve crosses 50%.',
+  transitions: 'Each row is a state the baby was in. Each cell is the share of times that state ended by moving to the column state. A row adds up to 100%. Tap a cell for the raw counts.\nThe table gives how long each state lasts. Spans cut off by the edge of the data or by missing time are left out of the averages and counted separately.',
+  alerts: 'Alerts the monitor decided to send. Solid is delivered to the phone, hatched was not delivered (push off or failed).\nThe lower chart shows the hour of day they fired, all kinds together.',
+  vision: 'Where the AI thought the baby was and how, weighted by time, using only checks it was confident about. Each bar is the share of observed time.\nStomach is the risk position that raises an emergency alert. Unknown means the AI could not tell.',
+  confidence: 'How sure the AI was in each check, from 0 to 1. Readings under the minimum (the dashed line) are ignored for position alerts and for the shares above.\nA big pile on the left means the picture is often too dark or blocked to judge.',
+  adult: 'How many times an adult was in view, by the hour the visit began. Visits closer than 5 minutes are merged into one.\nUseful as a rough picture of when you check on the baby.',
+  position: 'Of the asleep checks in each position or head direction, how many were followed by waking within 30 minutes. The dot is that share; the whisker is a 95% Wilson confidence interval. Hollow dots have few data.\nThis is an association, not a cause. Babies are laid down in a position, and a restless baby moves. Checks inside one sleep stretch are not independent, so the whiskers are tighter than the truth.',
+  signals: 'Check of the motion thresholds. For every minute with a known state, the spread of motion the camera saw: box is the middle half, whiskers are the 10th to 90th percentile, tick is the median.\nIf the asleep box sits well under the "moving" line and awake sits over it, the thresholds fit. "Peak" is each minute\'s highest second, which is what the state machine looks at.\nThe lower chart is the average sound level above the quiet floor, by hour.',
+  camera: 'How much of the period the camera was reachable, and each time it went offline. Time with the camera down is left out of every other chart.',
+};
+
+const few = (need) => el('span', 'few', 'few data', `Too little data to trust yet. This needs at least ${need} to be more than a hint.`);
+
+const NUM = new Intl.NumberFormat([], {maximumFractionDigits: 1});
+const fin = x => x != null && Number.isFinite(x);
+const n0 = x => fin(x) ? Math.round(x).toLocaleString() : '–';
+const n1 = x => fin(x) ? NUM.format(x) : '–';
+const pct = (x, d = 0) => fin(x) ? (x * 100).toFixed(d) + '%' : '–';
+const plural = (n, w, many = w + 's') => `${n0(n)} ${n === 1 ? w : many}`;
+function dur(s) {
+  if (!fin(s)) return '–';
+  s = Math.round(s);
+  if (s < 90) return s + ' s';
+  if (s < 5400) return Math.round(s / 60) + ' min';
+  const m = Math.round(s / 60);
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+}
+function clockMin(m) {
+  if (!fin(m)) return '–';
+  const t = ((Math.round(m) % 1440) + 1440) % 1440;
+  return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+}
+const hourLabel = h => String(h % 24).padStart(2, '0');
+const dayOf = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d, 12); };
+const dayShort = iso => dayOf(iso).toLocaleDateString([], {day: 'numeric', month: 'short'});
+const dayLong = iso => dayOf(iso).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
+const stamp = iso => new Date(iso).toLocaleString([], {timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+const cap = w => w ? w[0].toUpperCase() + w.slice(1) : w;
+const words = v => String(v).replace(/_/g, ' ');
+const sum = (xs, f = x => x) => xs.reduce((a, x) => a + (f(x) || 0), 0);
+function median(xs) {
+  if (!xs.length) return null;
+  const a = [...xs].sort((p, q) => p - q), m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+const sleepHours = Array.from({length: 24}, (_, i) => (7 + i) % 24);
+
+const svgEl = (tag, attrs, ...kids) => {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'tip') { n.dataset.tip = v; n.setAttribute('aria-label', v.replace(/\n/g, '. ')); }
+    else if (k === 'focus') n.setAttribute('tabindex', '0');
+    else n.setAttribute(k, v);
+  }
+  n.append(...kids);
+  return n;
+};
+const text = (x, y, t, attrs) => { const n = svgEl('text', {x, y, ...attrs}); n.textContent = t; return n; };
+const chart = (w, h, label) => svgEl('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': label, class: 'chart'});
+const line = (x1, y1, x2, y2, attrs) => svgEl('line', {x1, y1, x2, y2, ...attrs});
+const bodyW = body => Math.max(240, Math.floor(body.clientWidth));
+
+function niceTicks(max, want = 4, whole = false) {
+  if (!(max > 0)) return {top: 1, ticks: [0, 1]};
+  const raw = max / want, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
+  let step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  if (whole) step = Math.max(1, Math.ceil(step));
+  const top = Math.ceil(max / step - 1e-9) * step;
+  const ticks = [];
+  for (let v = 0; v <= top + step / 2; v += step) ticks.push(+v.toFixed(6));
+  return {top, ticks};
+}
+
+// Vertical (optionally stacked) bars. cols: {label, xl?, tip, faint?, segs: [{v, color, hatch?, dim?}]}.
+function barChart({cols, w, h = 170, yMax, yFmt = n0, whole = false, label, ratio = .72, overlay}) {
+  const m = {l: 38, r: 6, t: 8, b: 22}, iw = w - m.l - m.r, ih = h - m.t - m.b;
+  const peak = yMax ?? Math.max(0, ...cols.map(c => sum(c.segs, s => s.v)));
+  const {top, ticks} = niceTicks(peak, 4, whole);
+  const slot = iw / Math.max(1, cols.length), bw = Math.max(1.5, Math.min(30, slot * ratio));
+  const xAt = i => m.l + i * slot, yAt = v => m.t + ih - (v / top) * ih;
+  const svg = chart(w, h, label);
+  for (const t of ticks) {
+    svg.append(line(m.l, yAt(t), w - m.r, yAt(t), {class: 'grid-line'}), text(m.l - 6, yAt(t) + 3.5, yFmt(t), {'text-anchor': 'end'}));
+  }
+  const step = Math.max(1, Math.ceil(cols.length * 40 / iw));
+  cols.forEach((c, i) => {
+    const x = xAt(i) + (slot - bw) / 2;
+    let base = 0;
+    c.segs.forEach((s, k) => {
+      const hh = (s.v / top) * ih;
+      if (!(hh > 0.3)) return;
+      const y = yAt(base + s.v), gap = k > 0 && hh > 3 ? 2 : 0;
+      const op = (c.faint ? .4 : 1) * (s.dim ? .5 : 1);
+      svg.append(svgEl('rect', {x, y, width: bw, height: Math.max(.5, hh - gap), rx: Math.min(2.5, bw / 2), fill: s.color, opacity: op}));
+      if (s.hatch) svg.append(svgEl('rect', {x, y, width: bw, height: Math.max(.5, hh - gap), rx: Math.min(2.5, bw / 2), fill: 'url(#hatch)', opacity: op}));
+      base += s.v;
+    });
+    const xl = c.xl !== undefined ? c.xl : (i % step === 0 ? c.label : '');
+    if (xl) svg.append(text(xAt(i) + slot / 2, h - 6, xl, {'text-anchor': 'middle'}));
+  });
+  if (overlay) overlay(svg, {xAt, yAt, m, iw, ih, slot});
+  cols.forEach((c, i) => svg.append(svgEl('rect', {class: 'hit', x: xAt(i), y: m.t, width: slot, height: ih, tip: c.tip, focus: true})));
+  return svg;
+}
+
+// Horizontal bars with a label column. rows: {label, segs: [{v, color, hatch?}], tip, end}.
+function hBars({rows, w, max, labelW = 96, rowH = 26, label}) {
+  const endW = 64, iw = Math.max(40, w - labelW - endW), top = max ?? Math.max(1e-9, ...rows.map(r => sum(r.segs, s => s.v)));
+  const svg = chart(w, rows.length * rowH + 2, label);
+  rows.forEach((r, i) => {
+    const y = i * rowH + 3, cy = y + rowH / 2 - 2;
+    svg.append(text(0, cy + 4, r.label, {class: 'strong'}));
+    let x = labelW;
+    for (const s of r.segs) {
+      const bw = (s.v / top) * iw;
+      if (!(bw > 0.3)) continue;
+      svg.append(svgEl('rect', {x, y: y + 2, width: bw, height: rowH - 10, rx: 3, fill: s.color}));
+      if (s.hatch) svg.append(svgEl('rect', {x, y: y + 2, width: bw, height: rowH - 10, rx: 3, fill: 'url(#hatch)'}));
+      x += bw;
+    }
+    svg.append(text(x + 6, cy + 4, r.end, {}));
+    svg.append(svgEl('rect', {class: 'hit', x: 0, y, width: w, height: rowH - 2, tip: r.tip, focus: true}));
+  });
+  return svg;
+}
+
+const meta = (...parts) => {
+  const d = el('div', 'meta');
+  for (const p of parts) d.append(typeof p === 'string' ? document.createTextNode(p) : p);
+  return d;
+};
+const b = t => el('b', '', t);
+const empty = msg => el('div', 'empty', msg);
+const legend = items => {
+  const d = el('div', 'legend');
+  for (const [name, color, kind] of items) {
+    const s = el('span');
+    const i = document.createElement('i');
+    if (kind === 'ramp') i.className = 'ramp'; else { i.style.backgroundColor = color; if (kind) i.className = kind; }
+    s.append(i, name);
+    d.append(s);
+  }
+  return d;
+};
+function table(heads, rows, numFrom = 1) {
+  const t = el('table', 't');
+  const head = document.createElement('tr');
+  heads.forEach((h, i) => head.append(el('th', i >= numFrom ? 'num' : '', h)));
+  const thead = document.createElement('thead'); thead.append(head); t.append(thead);
+  const tb = document.createElement('tbody');
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    r.forEach((c, i) => { const td = el('td', i >= numFrom ? 'num' : '');
+      if (c instanceof Node) td.append(c); else td.textContent = c; tr.append(td); });
+    tb.append(tr);
+  }
+  t.append(tb);
+  return t;
+}
+const stateDot = s => { const d = el('span', 'dot'); d.style.background = COLORS[s]; return d; };
+const stateCell = s => { const f = document.createDocumentFragment(); f.append(stateDot(s), cap(s)); const w = el('span'); w.append(f); return w; };
+
+// ---------- cards ----------
+
+function drawCoverage(body, st) {
+  const c = st.coverage, win = c.window_s;
+  if (!(win > 0)) { body.append(empty('The window is empty.')); return; }
+  const down = c.camera_down_s, gap = c.process_gap_s, known = c.sleep_known_s;
+  const rest = Math.max(0, win - known - down - gap);
+  const parts = [
+    ['Covered', known, TEAL],
+    ['Camera down', down, VIOLET],
+    ['Monitor not running', gap, PINK],
+    ['No data', rest, 'rgba(255,255,255,.12)'],
+  ];
+  const bar = el('div', 'cover-bar');
+  bar.setAttribute('role', 'img');
+  bar.setAttribute('aria-label', parts.map(([n, v]) => `${n} ${pct(v / win)}`).join(', '));
+  for (const [name, v, color] of parts) {
+    if (!(v > 0)) continue;
+    const seg = document.createElement('i');
+    seg.style.cssText = `flex:${v};background:${color}`;
+    seg.dataset.tip = `${name}: ${dur(v)}, ${pct(v / win, 1)} of the ${dur(win)} period.`;
+    bar.append(seg);
+  }
+  const lowCover = c.fraction_covered < .5 || c.days_with_data < MIN.days;
+  const nums = el('div', 'cover-nums');
+  const stat = (lab, val, tip) => { const d = el('div', '', null, tip); d.append(b(val), lab); return d; };
+  nums.append(
+    stat('of the period has data', pct(c.fraction_covered, c.fraction_covered > .99 ? 1 : 0), `Covered: ${dur(known)} of ${dur(win)} has a known sleep state.`),
+    stat('monitor not running', dur(gap), 'Process gaps: time the monitor was off or restarting. Counted as unknown.'),
+    stat('camera down', dur(down), 'Camera down: time the camera was offline.'),
+    stat(c.days_with_data === 1 ? 'day with data' : 'days with data', n0(c.days_with_data), 'Sleep days (07:00 to 07:00) with at least one second of known state. The first and last are usually partial.'),
+  );
+  const m = meta(`${stamp(c.start)} to ${stamp(c.end)}, ${c.tz}`);
+  if (lowCover) m.append(few(`half the period covered and ${MIN.days} days`));
+  body.append(m, bar, legend(parts.map(([n, , col]) => [n, col, 'sq'])), nums);
+}
+
+function perDay(st) {
+  const days = st.days, covered = sum(days, d => d.covered_s);
+  const eq = covered / 86400;
+  const rate = f => eq > 0 ? sum(days, f) / covered * 86400 : null;
+  return {days, eq, rate};
+}
+
+function drawKpis(body, st) {
+  const {days, eq, rate} = perDay(st);
+  if (!(eq > 0)) { body.append(empty('No covered time in this period yet.')); return; }
+  const wrap = el('div', 'kpis');
+  const tile = (lab, val, subs, {low = false, tip} = {}) => {
+    const k = el('div', 'kpi' + (low ? ' low' : ''), null, tip);
+    const v = el('div', 'val'); v.append(...val);
+    const sub = el('div', 'sub'); sub.append(...subs);
+    if (low) sub.append(few(`${MIN.days} days`));
+    k.append(el('div', 'lab', lab), v, sub);
+    return k;
+  };
+  const small = t => el('small', '', t);
+  const lowDays = eq < MIN.days;
+  const thin = eq < .25;
+  const needMore = lab => tile(lab, [document.createTextNode('–')], ['needs about 6 h of data to say a per-day number']);
+  const asleep = rate(d => d.asleep_s), night = rate(d => d.night_sleep_s), nap = rate(d => d.day_sleep_s);
+  const napsPerDay = rate(d => d.nap_count);
+  if (!thin) wrap.append(
+    tile('Sleep per day', [document.createTextNode(dur(asleep))], [`over ${n1(eq)} days of data`], {low: lowDays,
+      tip: `Average sleep per 24 h: ${dur(asleep)}.\nTotal asleep time divided by covered time, over ${n1(eq)} days of covered data.`}),
+    tile('Night vs naps', [document.createTextNode(dur(night)), small(' night')], [`${dur(nap)} naps, ${n1(napsPerDay)} a day`], {low: lowDays,
+      tip: `Night is 19:00 to 07:00, naps are asleep time outside it.\nPer 24 h: night ${dur(night)}, naps ${dur(nap)}.\nA nap is a sleep stretch of at least 10 minutes outside the night.`}),
+  );
+  if (thin) wrap.append(needMore('Sleep per day'), needMore('Night vs naps'));
+  const longest = days.filter(d => d.longest_bout_s != null);
+  const lv = median(longest.map(d => d.longest_bout_s));
+  const cens = longest.filter(d => d.longest_bout_censored).length;
+  wrap.append(tile('Longest stretch', [document.createTextNode(dur(lv))],
+    [`median of ${plural(longest.length, 'day')}${cens ? `, ${cens} cut off` : ''}`],
+    {low: longest.length < MIN.days, tip: `The longest unbroken sleep of each day, then the median of those.\n${cens} of ${longest.length} days have a longest stretch cut off by the data edge or missing time, so the true value is at least this.`}));
+  const nights = days.filter(d => d.covered_s >= 43200);
+  const wk = nights.length ? sum(nights, d => d.night_wakings) / nights.length : null;
+  wrap.append(tile('Night wakings', [document.createTextNode(n1(wk)), small(wk == null ? '' : ' a night')],
+    [nights.length ? `over ${plural(nights.length, 'night')}` : 'needs a night with 12 h of data'],
+    {low: nights.length < MIN.days && nights.length > 0, tip: 'Times the baby woke between 19:00 and 07:00 (asleep to anything else, brief 3 minute blips ignored), averaged over days with at least 12 h of data.'}));
+  const reg = (lab, c, tip) => tile(lab, [document.createTextNode(clockMin(c.mean_min)), small(c.sd_min != null ? ` ± ${Math.round(c.sd_min)} min` : '')],
+    [c.n ? `over ${plural(c.n, 'day')}${c.sd_min == null ? ', spread needs 2' : ''}` : 'no day has this yet'],
+    {low: c.n > 0 && c.n < MIN.spreadDays, tip});
+  wrap.append(
+    reg('Bedtime', st.regularity.bedtime, 'Start of the first sleep stretch of 20 minutes or more in the night, as a mean and a standard deviation (the usual wobble) across days. Days where the evening is not in the data are skipped. The mean wraps correctly across midnight.'),
+    reg('Wake time', st.regularity.final_wake, 'End of the last sleep stretch before 07:00, mean and standard deviation across days. Smaller wobble means a steadier routine.'),
+  );
+  const cr = st.crying;
+  const crPerDay = rate(d => d.cry_episodes), crS = rate(d => d.crying_s);
+  wrap.append(thin ? needMore('Crying') : tile('Crying', [document.createTextNode(n1(crPerDay)), small(' a day')],
+    [`${dur(crS)} a day, ${plural(cr.n, 'episode')}`], {low: lowDays,
+      tip: `Crying episodes per 24 h, and total crying time per 24 h. Episodes start when crying is detected and end when the state changes.\n${plural(cr.n, 'episode')} in the whole period.`}));
+  body.append(meta(`Per-day numbers are time-weighted over `, b(n1(eq) + ' days'), ' of covered data.'), wrap);
+}
+
+function drawDaily(body, st) {
+  const days = st.days.filter(d => d.covered_s > 0);
+  if (!days.length) { body.append(empty('No days with data yet.')); return; }
+  const full = d => d.covered_s >= 20 * 3600;
+  const rolling = days.map((d, i) => {
+    if (days.length < 7) return null;
+    const win = days.slice(Math.max(0, i - 6), i + 1).filter(full);
+    return win.length >= 3 ? sum(win, x => x.asleep_s) / win.length / 3600 : null;
+  });
+  const cols = days.map(d => ({
+    label: dayShort(d.date), faint: !full(d),
+    segs: [{v: d.night_sleep_s / 3600, color: COLORS.asleep}, {v: d.day_sleep_s / 3600, color: NAP}],
+    tip: `${dayLong(d.date)}: ${dur(d.asleep_s)} asleep\nNight ${dur(d.night_sleep_s)}, naps ${dur(d.day_sleep_s)} (${plural(d.nap_count, 'nap')})\nLongest stretch ${dur(d.longest_bout_s)}${d.longest_bout_censored ? ' or more' : ''}, ${plural(d.night_wakings, 'night waking')}\n${full(d) ? `Data for ${dur(d.covered_s)}` : `Partial day: only ${dur(d.covered_s)} of data`}`,
+  }));
+  const w = bodyW(body);
+  const svg = barChart({cols, w, label: `Hours slept per day for ${days.length} days, night and naps stacked.`, yFmt: v => v + ' h',
+    overlay: (s, g) => {
+      const pts = rolling.map((v, i) => v == null ? null : [g.xAt(i) + g.slot / 2, g.yAt(v)]);
+      let path = '', pen = false;
+      for (const p of pts) { if (!p) { pen = false; continue; } path += (pen ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); pen = true; }
+      if (!path) return;
+      s.append(svgEl('path', {d: path, fill: 'none', stroke: 'rgba(14,18,32,.9)', 'stroke-width': 4.5, 'stroke-linejoin': 'round'}),
+               svgEl('path', {d: path, fill: 'none', stroke: '#eef2ff', 'stroke-width': 2, 'stroke-linejoin': 'round'}));
+      const last = pts.findLast(Boolean), lv = rolling.findLast(v => v != null);
+      s.append(svgEl('circle', {cx: last[0], cy: last[1], r: 4, fill: '#eef2ff', stroke: 'rgba(14,18,32,.9)', 'stroke-width': 2}));
+      s.append(text(Math.min(last[0], g.m.l + g.iw - 4), Math.max(g.m.t + 9, last[1] - 9), `${n1(lv)} h`, {'text-anchor': 'end', class: 'strong'}));
+    }});
+  const items = [['Night sleep', COLORS.asleep, 'sq'], ['Naps', NAP, 'sq']];
+  if (rolling.some(v => v != null)) items.push(['7-day average of total sleep', '#eef2ff']);
+  body.append(meta(b(plural(days.length, 'day')), ' shown', days.some(d => !full(d)) ? ', faded bars are partial days' : '',
+    days.length < MIN.days ? few(`${MIN.days} days`) : ''), svg, legend(items));
+  const det = document.createElement('details');
+  det.append(el('summary', '', 'Show as a table'));
+  const sc = el('div', 'scroll');
+  sc.append(table(['Day', 'Asleep', 'Night', 'Naps', 'Longest', 'Wakings', 'Data'],
+    days.map(d => [dayLong(d.date), dur(d.asleep_s), dur(d.night_sleep_s), dur(d.day_sleep_s),
+      d.longest_bout_s == null ? '–' : dur(d.longest_bout_s) + (d.longest_bout_censored ? '+' : ''), n0(d.night_wakings), dur(d.covered_s)])));
+  det.append(sc);
+  body.append(det);
+}
+
+const slotTime = s => clockMin(420 + s * 30) + '–' + clockMin(420 + (s + 1) * 30);
+
+function drawActogram(body, st) {
+  const ac = st.circadian.actogram, days = ac.days.filter(d => d.slots.some(s => s.known_s > 0));
+  if (!days.length) { body.append(empty('No sleep-state data to draw yet.')); return; }
+  const w = bodyW(body), labW = 50, top = 24, right = 2;
+  const n = days.length, rowH = n <= 10 ? 24 : n <= 31 ? 12 : 6;
+  const cw = (w - labW - right) / 48;
+  const motions = days.flatMap(d => d.slots.map(s => s.motion_mean)).filter(fin).sort((a, c) => a - c);
+  const p95 = motions.length ? motions[Math.floor(motions.length * .95)] || motions.at(-1) : 0;
+  const draw = mode => {
+    const h = top + n * rowH + 2;
+    const svg = chart(w, h, `Half-hour ${mode === 'state' ? 'sleep state' : 'motion'} for each of ${n} sleep days, from 07:00 to 07:00.`);
+    for (let k = 0; k < 48; k += 6) svg.append(text(labW + k * cw, 10, clockMin(420 + k * 30), {'text-anchor': 'start'}));
+    svg.append(svgEl('rect', {x: labW + 24 * cw, y: 14, width: 24 * cw, height: 3, rx: 1.5, fill: 'rgba(255,255,255,.28)'}),
+               svgEl('rect', {x: labW, y: 14, width: 24 * cw, height: 3, rx: 1.5, fill: 'rgba(255,255,255,.1)'}));
+    const labStep = Math.max(1, Math.ceil(13 / rowH));
+    days.forEach((d, r) => {
+      const y = top + r * rowH;
+      if (r % labStep === 0) svg.append(text(0, y + Math.min(rowH, 12) - 2 + (rowH > 12 ? (rowH - 12) / 2 : 0), dayShort(d.date), {class: 'small'}));
+      d.slots.forEach((s, k) => {
+        const x = labW + k * cw;
+        let fill = 'rgba(255,255,255,.045)', op = 1, tipText;
+        const when = `${dayLong(d.date)} ${slotTime(k)}`;
+        if (s.state) {
+          tipText = mode === 'state'
+            ? `${when}: ${s.state}\nMostly ${s.state}, ${dur(s.known_s)} of 30 min known\nMotion ${s.motion_mean == null ? 'no data' : s.motion_mean.toFixed(4)}`
+            : `${when}: motion ${s.motion_mean == null ? 'no data' : s.motion_mean.toFixed(4)}\nState ${s.state}, ${plural(s.motion_minutes, 'minute')} measured`;
+        } else tipText = `${when}: no data`;
+        if (mode === 'state' && s.state) { fill = COLORS[s.state]; op = .5 + .5 * Math.min(1, s.known_s / 1800); }
+        if (mode === 'motion' && s.motion_mean != null && p95 > 0) { fill = `hsl(172 55% ${14 + 58 * Math.min(1, s.motion_mean / p95) ** .6}%)`; }
+        svg.append(svgEl('rect', {x: x + .5, y: y + .5, width: Math.max(.5, cw - 1), height: Math.max(.5, rowH - 1), rx: Math.min(2, rowH / 4), fill, opacity: op, tip: tipText}));
+        if (mode === 'state' && s.state === 'stirring') svg.append(svgEl('rect', {x: x + .5, y: y + .5, width: Math.max(.5, cw - 1), height: Math.max(.5, rowH - 1), fill: 'url(#hatch)', opacity: op, 'pointer-events': 'none'}));
+      });
+    });
+    return svg;
+  };
+  let mode = 'state';
+  const holder = el('div');
+  const seg = el('div', 'seg');
+  seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Colour by');
+  const btns = [['state', 'Sleep state'], ['motion', 'Motion']].map(([m, name]) => {
+    const bt = el('button', '', name); bt.type = 'button'; bt.setAttribute('aria-pressed', m === mode);
+    bt.addEventListener('click', () => { mode = m; btns.forEach(x => x.setAttribute('aria-pressed', x === bt)); show(); });
+    return bt;
+  });
+  seg.append(...btns);
+  const key = el('div');
+  const show = () => {
+    holder.replaceChildren(draw(mode));
+    key.replaceChildren(mode === 'state'
+      ? legend([...STATES.map(s => [cap(s), COLORS[s]]), ['Stirring is hatched', COLORS.stirring, 'hatch']])
+      : legend([['Less motion', null, 'ramp'], [`More (full brightness at ${p95.toFixed(4)})`, TEAL]]));
+    sweepTip();
+  };
+  const tb = el('div', 'toolbar');
+  tb.append(meta(b(plural(n, 'sleep day')), ', 07:00 to 07:00, a column every 30 min', n < MIN.days ? few(`${MIN.days} days`) : ''), seg);
+  body.append(tb, holder, key);
+  show();
+}
+
+function drawCircadian(body, st) {
+  const hrs = st.circadian.hours;
+  const total = sum(hrs, h => h.known_s);
+  if (!(total > 0)) { body.append(empty('No known sleep state yet.')); return; }
+  const cols = sleepHours.map(hr => {
+    const h = hrs[hr], k = h.known_s, faint = k < 1800;
+    return {label: hourLabel(hr), faint,
+      segs: STATES.map(s => ({v: k > 0 ? (h.seconds[s] || 0) / k : 0, color: COLORS[s], hatch: s === 'stirring'})),
+      tip: `${hourLabel(hr)}:00–${hourLabel(hr + 1)}:00: ${k > 0 ? pct(h.seconds.asleep / k) + ' asleep' : 'no data'}\n${STATES.map(s => `${cap(s)} ${k > 0 ? pct((h.seconds[s] || 0) / k, 1) : '–'}`).join(', ')}\n${dur(k)} of data in total at this hour${faint ? '. Few data.' : ''}`};
+  });
+  const svg = barChart({cols, w: bodyW(body), yMax: 1, yFmt: v => Math.round(v * 100) + '%', ratio: .8, label: 'Share of each hour of the day spent in each sleep state.'});
+  body.append(meta('Hours run 07:00 to 07:00. ', b(dur(total)), ' of known time'), svg, legend([...STATES.map(s => [cap(s), COLORS[s], 'sq']), ['Hatched is stirring', COLORS.stirring, 'hatch']]));
+}
+
+function drawCrying(body, st) {
+  const c = st.crying;
+  if (!c.n) { body.append(meta(b('0 episodes'), ' in this period'), empty('No crying recorded.')); return; }
+  const m = meta(b(plural(c.n, 'episode')), `, ${dur(c.total_s)} in total, median ${dur(c.median_s)}, longest ${dur(c.longest_s)}`);
+  if (c.n_censored) m.append(`, ${c.n_censored} cut off`);
+  if (c.n < MIN.cry) m.append(few(`${MIN.cry} episodes`));
+  const cols = sleepHours.map(hr => ({label: hourLabel(hr), segs: [{v: c.by_hour[hr], color: COLORS.crying}],
+    tip: `${hourLabel(hr)}:00–${hourLabel(hr + 1)}:00: ${plural(c.by_hour[hr], 'episode')} started`}));
+  body.append(m, barChart({cols, w: bodyW(body), whole: true, label: 'Crying episodes by the hour they started.', ratio: .8, yFmt: n0}));
+}
+
+function pickStep(survival, t) {
+  let cur = survival[0];
+  for (const s of survival) { if (s.t_s <= t) cur = s; else break; }
+  return cur;
+}
+
+function drawBouts(body, st) {
+  const bt = st.bouts;
+  if (!bt.n) { body.append(meta(b('0 stretches'), ' in this period'), empty('No sleep stretches yet.')); return; }
+  const m = meta(b(plural(bt.n, 'stretch', 'stretches')), `, ${bt.n_censored} cut off, ${plural(bt.brief_arousals, 'brief wake')} merged in`);
+  if (bt.n_uncensored < MIN.bouts) m.append(few(`${MIN.bouts} complete stretches`));
+  const reading = el('p', 'reading');
+  if (bt.km_median_s != null) {
+    reading.append('Half of sleep stretches last longer than ', b(dur(bt.km_median_s)), '. ');
+    if (bt.median_s != null) reading.append(`Counting only finished stretches the middle one is ${dur(bt.median_s)}, with the middle half between ${dur(bt.p25_s)} and ${dur(bt.p75_s)}. `);
+  } else {
+    reading.append('Fewer than half of the stretches have ended yet, so no median can be given. ');
+  }
+  reading.append(`The longest ${bt.longest_censored ? 'so far ' : ''}was `, b(dur(bt.longest_s)), '.');
+  const pair = el('div', 'pair');
+  const w2 = Math.max(260, Math.floor((bodyW(body) - (innerWidth >= 760 ? 18 : 0)) / (innerWidth >= 760 ? 2 : 1)));
+
+  const bins = [...bt.histogram];
+  while (bins.length > 6 && bins.at(-1).count === 0) bins.pop();
+  const binS = bins[0] ? bins[0].to_s - bins[0].from_s : 600;
+  const cols = bins.map((x, i) => {
+    const cen = Math.min(x.censored, x.count), done = x.count - cen;
+    const range = x.to_s == null ? `${dur(x.from_s)} or longer` : `${dur(x.from_s)} to ${dur(x.to_s)}`;
+    return {label: '', xl: (x.from_s % 7200 === 0 && x.from_s > 0) ? (x.from_s / 3600) + ' h' : '',
+      segs: [{v: done, color: COLORS.asleep}, {v: cen, color: COLORS.asleep, hatch: true, dim: true}],
+      tip: `${range}: ${plural(x.count, 'stretch', 'stretches')}\n${done} finished, ${cen} cut off (at least this long)`};
+  });
+  const hist = barChart({cols, w: w2, h: 190, ratio: .92, whole: true, label: 'Histogram of sleep stretch lengths, finished and cut off.',
+    overlay: (s, g) => {
+      if (bt.median_s == null) return;
+      const x = g.xAt(bt.median_s / binS);
+      if (!(x < g.m.l + g.iw)) return;
+      s.append(line(x, g.m.t, x, g.m.t + g.ih, {stroke: '#eef2ff', 'stroke-width': 1.5, 'stroke-dasharray': '4 3'}),
+               text(Math.min(x + 4, g.m.l + g.iw - 60), g.m.t + 10, `median ${dur(bt.median_s)}`, {class: 'strong'}));
+    }});
+  const left = el('div'); left.append(el('div', 'sub-h', 'How long stretches last'), hist,
+    legend([['Finished', COLORS.asleep, 'sq'], ['Cut off, at least this long', COLORS.asleep, 'hatch']]));
+
+  const right = el('div');
+  right.append(el('div', 'sub-h', 'Chance still asleep after falling asleep'));
+  right.append(survivalChart(bt, w2));
+  right.append(legend([['Survival estimate', '#eef2ff'], ['95% confidence band', 'rgba(238,242,255,.25)', 'sq']]));
+  pair.append(left, right);
+  body.append(m, reading, pair);
+}
+
+function survivalChart(bt, w) {
+  const sv = bt.survival, h = 190, mg = {l: 38, r: 10, t: 10, b: 24}, iw = w - mg.l - mg.r, ih = h - mg.t - mg.b;
+  const tmax = Math.max(3600, sv.at(-1)?.t_s || 0);
+  const xt = niceTicks(tmax / 3600, Math.max(2, Math.floor(iw / 60)));
+  const X = t => mg.l + (t / 3600 / xt.top) * iw, Y = p => mg.t + ih - p * ih;
+  const svg = chart(w, h, 'Kaplan-Meier curve: chance a baby is still asleep as time since falling asleep grows.');
+  for (const p of [0, .25, .5, .75, 1]) svg.append(line(mg.l, Y(p), w - mg.r, Y(p), {class: 'grid-line'}), text(mg.l - 6, Y(p) + 3.5, Math.round(p * 100) + '%', {'text-anchor': 'end'}));
+  for (const t of xt.ticks) svg.append(text(X(t * 3600), h - 6, t + ' h', {'text-anchor': 'middle'}));
+  const stepPath = key => {
+    let d = `M${X(0)} ${Y(sv[0][key])}`;
+    for (let i = 1; i < sv.length; i++) d += `H${X(sv[i].t_s).toFixed(1)}V${Y(sv[i][key]).toFixed(1)}`;
+    return d + `H${X(xt.top * 3600)}`;
+  };
+  if (sv.length > 1) {
+    let back = '';
+    for (let i = sv.length - 1; i >= 0; i--) {
+      const x0 = i === sv.length - 1 ? X(xt.top * 3600) : X(sv[i + 1].t_s);
+      back += `L${x0.toFixed(1)} ${Y(sv[i].lo).toFixed(1)}L${X(sv[i].t_s).toFixed(1)} ${Y(sv[i].lo).toFixed(1)}`;
+    }
+    let fwd = `M${X(0)} ${Y(sv[0].hi)}`;
+    for (let i = 1; i < sv.length; i++) fwd += `H${X(sv[i].t_s).toFixed(1)}V${Y(sv[i].hi).toFixed(1)}`;
+    fwd += `H${X(xt.top * 3600)}`;
+    svg.append(svgEl('path', {d: fwd + back + 'Z', fill: 'rgba(238,242,255,.18)'}),
+               svgEl('path', {d: stepPath('survival'), fill: 'none', stroke: '#eef2ff', 'stroke-width': 2, 'stroke-linejoin': 'round'}));
+  }
+  svg.append(line(mg.l, Y(.5), w - mg.r, Y(.5), {stroke: 'rgba(255,255,255,.3)', 'stroke-dasharray': '3 4'}));
+  if (bt.km_median_s != null) {
+    const x = X(bt.km_median_s);
+    svg.append(line(x, Y(.5), x, mg.t + ih, {stroke: '#eef2ff', 'stroke-dasharray': '3 3'}),
+      svgEl('circle', {cx: x, cy: Y(.5), r: 5, fill: '#eef2ff', stroke: 'rgba(14,18,32,.9)', 'stroke-width': 2}),
+      text(Math.min(x + 8, w - mg.r - 70), Y(.5) - 8, `median ${dur(bt.km_median_s)}`, {class: 'strong'}));
+  }
+  const cols = Math.min(40, Math.floor(iw / 8));
+  for (let i = 0; i < cols; i++) {
+    const t = (i + .5) / cols * xt.top * 3600, s = pickStep(sv, t);
+    svg.append(svgEl('rect', {class: 'hit', x: mg.l + i * iw / cols, y: mg.t, width: iw / cols, height: ih, focus: true,
+      tip: `After ${dur(t)}: ${pct(s.survival)} still asleep\n95% interval ${pct(s.lo)} to ${pct(s.hi)}\n${plural(s.at_risk, 'stretch', 'stretches')} still being followed`}));
+  }
+  return svg;
+}
+
+function drawTransitions(body, st) {
+  const tr = st.transitions;
+  if (!tr.n) { body.append(meta(b('0 changes'), ' recorded'), empty('No state changes in this period.')); return; }
+  const m = meta(b(`${tr.n} changes`), ' between states');
+  if (tr.n < MIN.transitions) m.append(few(`${MIN.transitions} changes`));
+  const get = (a, c) => tr.counts.find(x => x.previous === a && x.current === c)?.count || 0;
+  const w = bodyW(body), labW = 74, hdr = 22, cell = Math.floor((w - labW - 2) / 4), h = hdr + 4 * (cell * .72) + 2, ch = cell * .72;
+  const svg = chart(w, h, 'Heat map of how often each sleep state is followed by each other state, as a share of exits from the row state.');
+  STATES.forEach((s, j) => svg.append(text(labW + j * cell + cell / 2, 13, cap(s), {'text-anchor': 'middle'})));
+  STATES.forEach((a, i) => {
+    const rowN = sum(STATES, c => get(a, c)), y = hdr + i * ch;
+    svg.append(text(0, y + ch / 2 - 1, cap(a), {class: 'strong'}), text(0, y + ch / 2 + 11, `${rowN} exits${rowN < MIN.exits ? ', few' : ''}`, {class: 'small'}));
+    STATES.forEach((c, j) => {
+      const x = labW + j * cell;
+      if (a === c) { svg.append(svgEl('rect', {x: x + 2, y: y + 2, width: cell - 4, height: ch - 4, rx: 8, fill: 'rgba(255,255,255,.03)'})); return; }
+      const n = get(a, c), p = rowN ? n / rowN : null;
+      const fill = p == null ? 'rgba(255,255,255,.04)' : `rgba(${cssVar('--accent-rgb')}, ${(.08 + .82 * p).toFixed(3)})`;
+      svg.append(svgEl('rect', {x: x + 2, y: y + 2, width: cell - 4, height: ch - 4, rx: 8, fill,
+        tip: `${cap(a)} to ${c}: ${p == null ? 'never left ' + a : pct(p, 1) + ' of exits'}\n${plural(n, 'time')} out of ${plural(rowN, 'exit')} from ${a}`, focus: true}));
+      svg.append(text(x + cell / 2, y + ch / 2 + 4, p == null ? '–' : Math.round(p * 100) + '%',
+        {'text-anchor': 'middle', class: 'strong', 'pointer-events': 'none'}));
+    });
+  });
+  const rows = tr.dwell.map(d => [stateCell(d.state), d.n + (d.n < MIN.exits ? ' (few)' : ''), String(d.n_censored), dur(d.median_s), dur(d.mean_s)]);
+  body.append(m, svg, table(['State', 'Spans', 'Cut off', 'Median', 'Mean'], rows));
+  body.append(el('p', 'note', 'Rows add up to 100%. Dwell times leave out spans cut off by the data edge or by missing time.'));
+}
+
+const ALERT_NAMES = {face_covered: 'Face covered', on_stomach: 'On stomach', head_left: 'Head left', crying: 'Crying', awake_during_nap: 'Awake in nap', camera_offline: 'Camera offline'};
+
+function drawAlerts(body, st) {
+  const a = st.alerts;
+  if (!a.n) { body.append(meta(b('0 alerts'), ' in this period'), empty('No alerts fired. That is good news.')); return; }
+  const m = meta(b(plural(a.n, 'alert')), `, ${a.delivered} delivered, ${a.n - a.delivered} not`);
+  if (a.n < MIN.alerts) m.append(few(`${MIN.alerts} alerts`));
+  const w = bodyW(body);
+  const kinds = a.by_kind.filter(k => k.count > 0).sort((p, q) => q.count - p.count);
+  const rows = kinds.map(k => ({label: ALERT_NAMES[k.kind] || words(k.kind), end: String(k.count),
+    segs: [{v: k.delivered, color: PINK}, {v: k.count - k.delivered, color: PINK, hatch: true}],
+    tip: `${ALERT_NAMES[k.kind] || words(k.kind)}: ${plural(k.count, 'alert')}\n${k.delivered} delivered to the phone, ${k.count - k.delivered} not delivered`}));
+  const byHour = sleepHours.map(hr => ({label: hourLabel(hr), segs: [{v: sum(a.by_kind, k => k.by_hour[hr]), color: PINK}],
+    tip: `${hourLabel(hr)}:00–${hourLabel(hr + 1)}:00: ${plural(sum(a.by_kind, k => k.by_hour[hr]), 'alert')}\n` +
+      (a.by_kind.filter(k => k.by_hour[hr]).map(k => `${ALERT_NAMES[k.kind] || words(k.kind)} ${k.by_hour[hr]}`).join(', ') || 'none')}));
+  body.append(m, el('div', 'sub-h', 'By kind'), hBars({rows, w, labelW: 108, label: 'Alerts by kind, delivered and not delivered.'}),
+    legend([['Delivered', PINK, 'sq'], ['Not delivered', PINK, 'hatch']]),
+    el('div', 'sub-h', 'By hour of day'), barChart({cols: byHour, w, h: 140, ratio: .8, whole: true, label: 'Alerts by hour of day.'}));
+}
+
+function shareBlock(title, held, w, tipExtra) {
+  const box = el('div');
+  const shares = held.shares.filter(s => s.fraction != null && s.seconds > 0).sort((x, y) => y.fraction - x.fraction);
+  box.append(el('div', 'sub-h', `${title}, ${dur(held.seconds)} observed`));
+  if (!shares.length) { box.append(empty('No confident readings.')); return box; }
+  const rows = shares.map(s => {
+    const risk = s.value === 'stomach', gray = s.value === 'unknown' || s.value === 'not_visible';
+    return {label: cap(words(s.value)), end: pct(s.fraction, s.fraction < .1 ? 1 : 0),
+      segs: [{v: s.fraction, color: risk ? COLORS.crying : gray ? COLORS.unknown : ACCENT}],
+      tip: `${cap(words(s.value))}: ${pct(s.fraction, 1)} of observed time\n${dur(s.seconds)}${risk ? '\nA risk position: raises an emergency alert' : ''}${tipExtra || ''}`};
+  });
+  box.append(hBars({rows, w, max: 1, labelW: 92, rowH: 24, label: `${title} shares of observed time.`}));
+  return box;
+}
+
+function drawVision(body, st) {
+  const v = st.vision;
+  if (!v.n) { body.append(meta(b('0 checks'), ' in this period'), empty('The AI has not looked yet.')); return; }
+  const m = meta(b(plural(v.n_confident, 'confident check')), ` of ${v.n}`);
+  if (v.n_confident < MIN.vision) m.append(few(`${MIN.vision} confident checks`));
+  const w = bodyW(body);
+  const wrap = el('div', 'pair');
+  const w2 = Math.floor((w - (innerWidth >= 760 ? 18 : 0)) / (innerWidth >= 760 ? 2 : 1));
+  wrap.append(shareBlock('Body position', v.body, w2), shareBlock('Head direction', v.head, w2),
+    shareBlock('Eyes', v.eyes, w2), shareBlock('Location', v.location, w2));
+  body.append(m, wrap);
+  if (v.face_covered_readings) body.append(el('p', 'note', `Face covered was read in ${plural(v.face_covered_readings, 'confident check')}.`));
+}
+
+function drawConfidence(body, st) {
+  const v = st.vision;
+  if (!v.n) { body.append(meta(b('0 checks')), empty('No vision checks yet.')); return; }
+  const mc = st.tuning.min_confidence;
+  const m = meta(b(plural(v.n, 'check')), ', ', b(pct(v.low_confidence_share)), ' under the minimum of ' + mc);
+  if (v.n < MIN.vision) m.append(few(`${MIN.vision} checks`));
+  const cols = v.confidence.map(x => {
+    const low = x.hi <= mc + 1e-9;
+    return {label: '', xl: Math.abs(x.lo * 10 - Math.round(x.lo * 10)) < 1e-6 && Math.round(x.lo * 10) % 2 === 0 ? x.lo.toFixed(1) : '',
+      segs: [{v: x.count, color: low ? COLORS.unknown : ACCENT, hatch: low}],
+      tip: `Confidence ${x.lo.toFixed(1)} to ${x.hi.toFixed(1)}: ${plural(x.count, 'check')}\n${low ? 'Below the minimum: ignored' : 'Used for position and shares'}`};
+  });
+  const svg = barChart({cols, w: bodyW(body), ratio: .9, whole: true, label: 'Histogram of vision check confidence.',
+    overlay: (s, g) => {
+      const x = g.xAt(mc / (v.confidence[0] ? v.confidence[0].hi - v.confidence[0].lo : .1));
+      s.append(line(x, g.m.t, x, g.m.t + g.ih, {stroke: '#eef2ff', 'stroke-width': 1.5, 'stroke-dasharray': '4 3'}),
+        text(x - 4, g.m.t + 10, `minimum ${mc}`, {class: 'strong', 'text-anchor': 'end'}));
+    }});
+  body.append(m, svg, legend([['Used', ACCENT, 'sq'], ['Ignored, under the minimum', COLORS.unknown, 'hatch']]));
+}
+
+function drawAdult(body, st) {
+  const a = st.vision.adult_visits;
+  if (!a.n) { body.append(meta(b('0 visits')), empty('No adult in view in this period.')); return; }
+  const m = meta(b(plural(a.n, 'visit')));
+  const night = sum(a.by_day, d => d.night);
+  m.append(`, ${night} at night (19:00 to 07:00)`);
+  const cols = sleepHours.map(hr => ({label: hourLabel(hr), segs: [{v: a.by_hour[hr], color: VIOLET}],
+    tip: `${hourLabel(hr)}:00–${hourLabel(hr + 1)}:00: ${plural(a.by_hour[hr], 'visit')}`}));
+  body.append(m, barChart({cols, w: bodyW(body), ratio: .8, whole: true, label: 'Adult visits by hour of day.'}));
+}
+
+function drawPosition(body, st) {
+  const p = st.position_waking;
+  if (!p.n) { body.append(meta(b('0 checks')), empty('Not enough asleep checks to compare yet.')); return; }
+  const m = meta(b(plural(p.n, 'asleep check')), `, ${pct(p.rate)} followed by waking within ${Math.round(p.horizon_s / 60)} min`);
+  if (p.n < MIN.rows) m.append(few(`${MIN.rows} checks`));
+  const rows = [...p.body.map(r => ['Position', r]), ...p.head.map(r => ['Head', r])].filter(([, r]) => r.n > 0 && r.rate != null);
+  if (!rows.length) { body.append(m, empty('No rate could be worked out.')); return; }
+  const w = bodyW(body), labW = 118, rowH = 38, top = 22, bot = 22, mg = 12;
+  const xmax = niceTicks(Math.max(p.ci_hi ?? 0, ...rows.map(([, r]) => r.ci_hi ?? r.rate)) * 1.05, 4);
+  const iw = w - labW - mg, X = v => labW + (v / xmax.top) * iw;
+  const h = top + rows.length * rowH + bot;
+  const svg = chart(w, h, 'Share of asleep checks followed by waking, by body position and head direction, with confidence intervals.');
+  for (const t of xmax.ticks) svg.append(line(X(t), top - 4, X(t), h - bot + 4, {class: 'grid-line'}), text(X(t), h - 6, Math.round(t * 100) + '%', {'text-anchor': 'middle'}));
+  if (p.ci_lo != null) svg.append(svgEl('rect', {x: X(p.ci_lo), y: top - 4, width: Math.max(1, X(p.ci_hi) - X(p.ci_lo)), height: h - bot - top + 8, fill: 'rgba(255,255,255,.1)'}),
+    line(X(p.rate), top - 4, X(p.rate), h - bot + 4, {stroke: 'rgba(255,255,255,.55)', 'stroke-dasharray': '3 3'}),
+    text(X(p.rate) + 4, 11, `all ${pct(p.rate)}`, {class: 'small'}));
+  rows.forEach(([kind, r], i) => {
+    const y = top + i * rowH, cy = y + rowH / 2 - 2, lowN = r.n < MIN.rows;
+    const name = `${kind === 'Head' ? 'Head ' : ''}${words(r.value)}`;
+    svg.append(text(0, cy - 1, cap(name), {class: 'strong'}), text(0, cy + 11, `n=${r.n} · ${r.wakes} woke${lowN ? ' · few' : ''}`, {class: 'small'}));
+    if (r.ci_lo != null) svg.append(line(X(r.ci_lo), cy, X(r.ci_hi), cy, {stroke: '#eef2ff', 'stroke-width': 2, opacity: lowN ? .5 : 1}),
+      line(X(r.ci_lo), cy - 5, X(r.ci_lo), cy + 5, {stroke: '#eef2ff', 'stroke-width': 2, opacity: lowN ? .5 : 1}),
+      line(X(r.ci_hi), cy - 5, X(r.ci_hi), cy + 5, {stroke: '#eef2ff', 'stroke-width': 2, opacity: lowN ? .5 : 1}));
+    svg.append(svgEl('circle', {cx: X(r.rate), cy, r: 6, fill: lowN ? 'rgb(14,18,32)' : ACCENT, stroke: lowN ? ACCENT : 'rgb(14,18,32)', 'stroke-width': 2.5}));
+    svg.append(svgEl('rect', {class: 'hit', x: 0, y, width: w, height: rowH - 2, focus: true,
+      tip: `${cap(name)}: ${pct(r.rate, 1)} woke within ${Math.round(p.horizon_s / 60)} min\n${r.wakes} of ${r.n} asleep checks, 95% interval ${pct(r.ci_lo, 1)} to ${pct(r.ci_hi, 1)}${lowN ? '\nFew data: treat as a hint only' : ''}\nAssociation, not cause`}));
+  });
+  body.append(m, svg, legend([['Share that woke, with 95% interval', ACCENT], ['Shaded: all positions together', 'rgba(255,255,255,.3)', 'sq']]));
+  body.append(el('p', 'note', `Association, not cause: babies are laid in a position and a restless baby changes position. Checks inside one sleep stretch are not independent, so the intervals are tighter than reality.${p.n_unresolved ? ` ${p.n_unresolved} checks were left out because the follow-up time was cut short.` : ''}`));
+}
+
+function drawSignals(body, st) {
+  const sg = st.signals, tu = st.tuning;
+  if (!sg.n_minutes) { body.append(meta(b('0 minutes')), empty('No minute-level motion data yet.')); return; }
+  const m = meta(b(sg.n_minutes.toLocaleString() + ' minutes'), sg.n_unattributed ? `, ${n0(sg.n_unattributed)} without a known state left out` : '');
+  let key = 'motion_peak';
+  const seg = el('div', 'seg');
+  seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Motion measure');
+  const holder = el('div');
+  const btns = [['motion_peak', 'Peak'], ['motion_mean', 'Average']].map(([k, name]) => {
+    const bt = el('button', '', name, k === 'motion_peak' ? 'Each minute\'s highest second of motion. This is what the thresholds act on.' : 'Each minute\'s average motion.');
+    bt.type = 'button'; bt.setAttribute('aria-pressed', k === key);
+    bt.addEventListener('click', () => { key = k; btns.forEach(x => x.setAttribute('aria-pressed', x === bt)); show(); });
+    return bt;
+  });
+  seg.append(...btns);
+  const w = bodyW(body);
+  const box = () => {
+    const rows = sg.by_state.filter(s => s[key].n > 0);
+    if (!rows.length) return empty('No minutes with a known state.');
+    const labW = 78, rowH = 34, top = 22, bot = 22, mg = 10, iw = w - labW - mg;
+    const xtop = Math.max(tu.motion_active * 1.25, ...rows.map(s => s[key].p90 ?? 0)) * 1.05;
+    const X = v => labW + Math.sqrt(Math.max(0, v) / xtop) * iw, h = top + rows.length * rowH + bot;
+    const xm = {ticks: [0, .02, .05, .1, .2, .5, 1, 2].filter(t => t <= xtop).filter((t, i, a) => i === 0 || X(t) - X(a[i - 1]) >= 30)};
+    const svg = chart(w, h, 'Box plots of motion level for each sleep state, with the moving and active thresholds.');
+    for (const t of xm.ticks) svg.append(line(X(t), top - 4, X(t), h - bot + 4, {class: 'grid-line'}), text(X(t), h - 6, +t.toFixed(3), {'text-anchor': 'middle'}));
+    for (const [v, name, col, dy] of [[tu.motion_moving, 'moving', COLORS.stirring, 11], [tu.motion_active, 'active', COLORS.awake, 11]]) {
+      svg.append(line(X(v), top - 4, X(v), h - bot + 4, {stroke: col, 'stroke-width': 1.5, 'stroke-dasharray': '4 3'}),
+        text(name === 'moving' ? X(v) - 4 : X(v) + 4, dy - 1, `${name} ${v}`, {class: 'small', fill: col, 'text-anchor': name === 'moving' ? 'end' : 'start'}));
+    }
+    rows.forEach((s, i) => {
+      const q = s[key], y = top + i * rowH, cy = y + rowH / 2 - 2, lowN = q.n < MIN.minutes;
+      svg.append(text(0, cy - 1, cap(s.state), {class: 'strong'}), text(0, cy + 11, `n=${s.n_minutes}${lowN ? ' · few' : ''}`, {class: 'small'}));
+      const col = COLORS[s.state], op = lowN ? .45 : 1;
+      svg.append(line(X(q.p10), cy, X(q.p90), cy, {stroke: col, 'stroke-width': 2, opacity: op}),
+        line(X(q.p10), cy - 5, X(q.p10), cy + 5, {stroke: col, 'stroke-width': 2, opacity: op}),
+        line(X(q.p90), cy - 5, X(q.p90), cy + 5, {stroke: col, 'stroke-width': 2, opacity: op}),
+        svgEl('rect', {x: X(q.p25), y: cy - 8, width: Math.max(2, X(q.p75) - X(q.p25)), height: 16, rx: 3, fill: col, 'fill-opacity': .32 * (lowN ? .6 : 1), stroke: col, 'stroke-width': 1.5, opacity: op}),
+        line(X(q.median), cy - 8, X(q.median), cy + 8, {stroke: '#fff', 'stroke-width': 2.5}));
+      svg.append(svgEl('rect', {class: 'hit', x: 0, y, width: w, height: rowH - 2, focus: true,
+        tip: `${cap(s.state)}: median ${q.median.toFixed(4)}\nMiddle half ${q.p25.toFixed(4)} to ${q.p75.toFixed(4)}, 10th to 90th percentile ${q.p10.toFixed(4)} to ${q.p90.toFixed(4)}\n${plural(q.n, 'minute')}, ${s.cry_minutes} with crying sound${lowN ? '\nFew data' : ''}\nThresholds: moving ${tu.motion_moving}, active ${tu.motion_active}`}));
+    });
+    return svg;
+  };
+  const show = () => { holder.replaceChildren(box()); sweepTip(); };
+  const tb = el('div', 'toolbar'); tb.append(m, seg);
+  body.append(tb, holder, legend([['Box: middle half, whiskers 10th to 90th percentile, white tick median. Square-root scale.', null, '']]));
+  show();
+  const hrs = sg.loudness_by_hour, mx = Math.max(0, ...hrs.map(x => x.mean_db ?? 0));
+  const cols = sleepHours.map(hr => {
+    const x = hrs[hr], v = x.mean_db;
+    return {label: hourLabel(hr), segs: [{v: v != null ? Math.max(0, v) : 0, color: TEAL, dim: x.n_samples < 600}],
+      tip: `${hourLabel(hr)}:00–${hourLabel(hr + 1)}:00: ${v == null ? 'no sound data' : v.toFixed(1) + ' dB above the quiet floor'}\n${n0(x.n_samples)} samples${x.n_samples < 600 ? '. Few data.' : ''}`};
+  });
+  body.append(el('div', 'sub-h', 'Average loudness above the quiet floor, by hour'),
+    barChart({cols, w, h: 140, ratio: .8, yMax: mx > 0 ? mx : 1, yFmt: v => n1(v), label: 'Average loudness by hour of day.'}));
+}
+
+function drawCamera(body, st) {
+  const c = st.camera;
+  if (!(c.known_s > 0)) { body.append(empty('No camera history in this period.')); return; }
+  const m = meta(b(pct(c.uptime_fraction, 2)), ' up, ', b(plural(c.n_outages, 'outage')), `, ${dur(c.down_s)} down`);
+  if (c.longest_outage_s != null) m.append(`, longest ${dur(c.longest_outage_s)}`);
+  body.append(m);
+  const win = new Date(st.coverage.end) - new Date(st.coverage.start);
+  const w = bodyW(body), svg = chart(w, 22, 'Timeline of camera outages across the period.');
+  svg.append(svgEl('rect', {x: 0, y: 4, width: w, height: 14, rx: 4, fill: 'rgba(90,208,192,.55)'}));
+  for (const o of c.outages) {
+    const x = (new Date(o.start) - new Date(st.coverage.start)) / win * w, wd = (new Date(o.end) - new Date(o.start)) / win * w;
+    svg.append(svgEl('rect', {x: Math.max(0, x), y: 2, width: Math.max(3, wd), height: 18, rx: 2, fill: VIOLET, focus: true,
+      tip: `Camera down: ${stamp(o.start)} to ${o.ongoing ? 'now' : stamp(o.end)}\n${dur(o.duration_s)}${o.ongoing ? ', still down' : ''}`}));
+  }
+  body.append(svg, legend([['Camera up', 'rgba(90,208,192,.6)', 'sq'], ['Camera down', VIOLET, 'sq']]));
+  if (!c.outages.length) { body.append(el('p', 'note', 'No outages in this period.')); return; }
+  const list = el('div', 'outages');
+  for (const o of [...c.outages].reverse().slice(0, 8)) {
+    const row = el('div', 'outage');
+    row.append(el('span', '', `${stamp(o.start)} to ${o.ongoing ? 'now' : stamp(o.end)}`));
+    if (o.ongoing) row.append(el('span', 'badge', 'still down'));
+    row.append(el('b', '', dur(o.duration_s)));
+    list.append(row);
+  }
+  body.append(list);
+  if (c.outages.length > 8) body.append(el('p', 'note', `${c.outages.length - 8} older outages not listed.`));
+}
+
+// ---------- page ----------
+
+const CARDS = [
+  ['coverage', drawCoverage], ['kpis', drawKpis], ['daily', drawDaily], ['actogram', drawActogram],
+  ['circadian', drawCircadian], ['crying', drawCrying], ['bouts', drawBouts], ['transitions', drawTransitions],
+  ['alerts', drawAlerts], ['vision', drawVision], ['confidence', drawConfidence], ['adult', drawAdult],
+  ['position', drawPosition], ['signals', drawSignals], ['camera', drawCamera],
+];
+for (const e of document.querySelectorAll('[data-tipkey]')) e.dataset.tip = TIPS[e.dataset.tipkey] || '';
+
+let current = null;
+function render() {
+  if (!current) return;
+  for (const [id, fn] of CARDS) {
+    const body = document.querySelector(`#c-${id} .body`);
+    body.replaceChildren();
+    try { fn(body, current); } catch (err) {
+      console.error(id, err);
+      body.replaceChildren(empty('This chart could not be drawn.'));
+    }
+  }
+  sweepTip();
+}
+
+function banner(message) {
+  const box = $('banners');
+  if (!message) { box.replaceChildren(); return; }
+  const d = el('div', 'banner');
+  const retry = el('button', 'btn', 'Retry'); retry.type = 'button';
+  retry.addEventListener('click', load);
+  d.append(el('span', '', message), retry);
+  box.replaceChildren(d);
+}
+
+const rangeKey = () => RANGES[location.hash.slice(1)] ? location.hash.slice(1) : '7d';
+let ticket = 0;
+async function load() {
+  const my = ++ticket, key = rangeKey();
+  for (const bt of $('range').children) bt.setAttribute('aria-pressed', bt.dataset.r === key);
+  $('main').setAttribute('aria-busy', 'true');
+  try {
+    const r = await fetch(`/api/stats?days=${RANGES[key]}&tz=${encodeURIComponent(TZ)}`, {cache: 'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (my !== ticket) return;
+    current = data;
+    banner('');
+    render();
+  } catch (err) {
+    if (my !== ticket) return;
+    banner(current ? 'Could not refresh the statistics. Showing the last numbers.' : 'Could not load the statistics.');
+  }
+  if (my === ticket) $('main').setAttribute('aria-busy', 'false');
+}
+
+$('range').addEventListener('click', ev => {
+  const bt = ev.target.closest('button[data-r]');
+  if (bt) location.hash = bt.dataset.r;
+});
+addEventListener('hashchange', load);
+let resizeTimer = 0, lastW = innerWidth;
+addEventListener('resize', () => {
+  if (innerWidth === lastW) return;
+  lastW = innerWidth;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(render, 150);
+});
+setInterval(() => { if (!document.hidden) load(); }, 300000);
+load();
+</script>
+</body>
+</html>

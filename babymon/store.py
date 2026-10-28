@@ -1,6 +1,6 @@
 """Everything on disk, behind one object. The only module that knows the layout:
 
-    <data_dir>/babymon.sqlite3     events (24 h), controls (one row, never pruned)
+    <data_dir>/babymon.sqlite3     events (90 d), minutes (90 d), controls (one row, never pruned)
     <data_dir>/snapshots/          <UTC %Y%m%d-%H%M%S>-<label>.jpg   (24 h)
     <data_dir>/segments/           <UTC %Y%m%d-%H%M%S>.mp4  written by ffmpeg (24 h)
     <data_dir>/reference.jpg       the "good position" image, never pruned
@@ -35,8 +35,10 @@ from babymon.domain import (
     ControlsChanged,
     Event,
     Instant,
+    MinuteRollup,
     Restored,
     SleepChanged,
+    SleepSpan,
     SleepState,
     SnapshotRef,
     Still,
@@ -44,6 +46,9 @@ from babymon.domain import (
 )
 
 RETENTION = timedelta(hours=24)
+"""Media: segments and snapshots."""
+EVENT_RETENTION = timedelta(days=90)
+"""Event rows are small and are the history the statistics page reads."""
 SLEEP_RESUME_WINDOW = timedelta(minutes=10)
 GROWING_IF_WRITTEN_WITHIN = timedelta(seconds=30)
 CLIP_END_SLACK = timedelta(seconds=10)
@@ -68,6 +73,17 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_at ON events (at_us);
 CREATE INDEX IF NOT EXISTS events_type_at ON events (type, at_us);
+CREATE TABLE IF NOT EXISTS minutes (
+    at_us INTEGER PRIMARY KEY,
+    motion_samples INTEGER NOT NULL,
+    motion_mean REAL,
+    motion_peak REAL,
+    audio_samples INTEGER NOT NULL,
+    loudness_mean_db REAL,
+    loudness_peak_db REAL,
+    cry_peak REAL,
+    cry_seconds INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS controls (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     payload TEXT NOT NULL
@@ -147,14 +163,6 @@ class StoredEvent:
 
 
 @dataclass(frozen=True, slots=True)
-class SleepSpan:
-    state: SleepState | None
-    """None for the part of the window before the first known state."""
-    start: Instant
-    end: Instant
-
-
-@dataclass(frozen=True, slots=True)
 class Clip:
     name: str
     start: Instant
@@ -169,6 +177,7 @@ class SweepReport:
     segments: int
     snapshots: int
     events: int
+    minutes: int
 
 
 class Store:
@@ -226,9 +235,9 @@ class Store:
         _write_atomically(self._dir / "reference.jpg", still.jpeg)
 
     def sweep(self, now: Instant) -> SweepReport:
-        """Delete segments, snapshots and event rows older than now - RETENTION.
-        Segments are judged by the *next* segment's start, so the file covering
-        the horizon survives. Converges no matter how many times it runs."""
+        """Delete segments and snapshots older than now - RETENTION and event rows older
+        than now - EVENT_RETENTION. Segments are judged by the *next* segment's start, so
+        the file covering the horizon survives. Converges no matter how many times it runs."""
         horizon = now - RETENTION
         segments = self._segment_listing()
         expired_segments = [
@@ -245,9 +254,11 @@ class Store:
             path.unlink(missing_ok=True)
         for path in expired_snapshots:
             path.unlink(missing_ok=True)
+        data_horizon = _us(now - EVENT_RETENTION)
         with closing(self._connect()) as conn, conn:
-            events = conn.execute("DELETE FROM events WHERE at_us < ?", (_us(horizon),)).rowcount
-        return SweepReport(len(expired_segments), len(expired_snapshots), events)
+            events = conn.execute("DELETE FROM events WHERE at_us < ?", (data_horizon,)).rowcount
+            minutes = conn.execute("DELETE FROM minutes WHERE at_us < ?", (data_horizon,)).rowcount
+        return SweepReport(len(expired_segments), len(expired_snapshots), events, minutes)
 
     def restore(self, now: Instant, cooldown_s: float) -> Restored:
         """Controls row (defaults if none), last SleepChanged if within 10 min, and the
@@ -291,6 +302,53 @@ class Store:
                 (_us(since), _us(until), limit),
             ).fetchall()
         return [StoredEvent(id, _EVENT.validate_json(payload)) for id, payload in rows]
+
+    def events_of[E: Event](self, kind: type[E], since: Instant, until: Instant) -> list[E]:
+        """Every row of one event class for since <= at <= until, oldest first, no limit."""
+        return [
+            kind.model_validate_json(payload)
+            for (payload,) in self._rows_of(
+                kind, "at_us BETWEEN ? AND ? ORDER BY at_us, id", (_us(since), _us(until))
+            )
+        ]
+
+    def last_event_before[E: Event](self, kind: type[E], at: Instant) -> E | None:
+        rows = self._rows_of(kind, "at_us < ? ORDER BY at_us DESC, id DESC LIMIT 1", (_us(at),))
+        return kind.model_validate_json(rows[0][0]) if rows else None
+
+    def _rows_of(self, kind: type[Event], tail: str, args: tuple[int, ...]) -> list[tuple[str]]:
+        with closing(self._connect()) as conn:
+            return conn.execute(
+                f"SELECT payload FROM events WHERE type = ? AND {tail}",
+                (kind.model_fields["type"].default, *args),
+            ).fetchall()
+
+    def append_minute(self, minute: MinuteRollup) -> None:
+        """Replaces a row for the same minute, so a retried write converges."""
+        with closing(self._connect()) as conn, conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO minutes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    _us(minute.at),
+                    minute.motion_samples,
+                    minute.motion_mean,
+                    minute.motion_peak,
+                    minute.audio_samples,
+                    minute.loudness_mean_db,
+                    minute.loudness_peak_db,
+                    minute.cry_peak,
+                    minute.cry_seconds,
+                ),
+            )
+
+    def minutes(self, since: Instant, until: Instant) -> list[MinuteRollup]:
+        """Oldest first, for since <= at < until."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM minutes WHERE at_us >= ? AND at_us < ? ORDER BY at_us",
+                (_us(since), _us(until)),
+            ).fetchall()
+        return [MinuteRollup(_from_us(row[0]), *row[1:]) for row in rows]
 
     def sleep_timeline(self, since: Instant, until: Instant) -> list[SleepSpan]:
         """Derived from SleepChanged rows; contiguous spans covering [since, until]."""

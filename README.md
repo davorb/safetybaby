@@ -84,6 +84,10 @@ The page at port 8080 shows the latest frame (refreshed every 2 seconds), the cu
 
 The sleep states are asleep, stirring, awake and crying. A fresh start begins in stirring, which no rule alerts on, so a restart cannot fake an "awake during nap" alert.
 
+## Statistics
+
+`/stats` shows sleep statistics for the last 1 to 90 days, and `GET /api/stats?days=N&tz=<IANA zone>` returns the same numbers as JSON. Pass the browser's time zone as `tz`, because the container runs in UTC. A sleep day runs from 07:00 to 07:00 local time and the night is 19:00 to 07:00. Event rows and one summary row per minute of motion and sound are kept for 90 days, so the history reaches back to the first start after the upgrade. Every block reports how much time it covers. Time when the camera was down or the process was not running counts as unknown, never as the last sleep state.
+
 ## Vision cost
 
 Each check sends up to two JPEG images, the reference and the current frame, downscaled to `BABYMON_VISION__API_FRAME_WIDTH` (640 px) wide. The periodic check runs every `BABYMON_TUNING__VISION_PERIOD_S` (60 s) only when motion was seen since the last check. On a still scene it runs every `BABYMON_TUNING__VISION_PERIOD_QUIET_S` (900 s). That is at most about 1,440 calls a day and about 96 on a quiet night. A check also runs when motion settles. `BABYMON_VISION__MODEL` picks the model (default `claude-haiku-5-5`). On Haiku 5.5 a quiet night costs on the order of a dollar or two a month. `claude-opus-5-5` costs roughly fifty times more per call, and the original default of one full-size check per minute on Opus came to about a thousand dollars a month, so change the model with care. A longer period delays "face covered" and "on stomach", which need two consecutive checks, by the same amount. While a dangerous reading is pending, checks run every `BABYMON_TUNING__VISION_CONFIRM_S` (15 s) regardless.
@@ -97,4 +101,4 @@ Each check sends up to two JPEG images, the reference and the current frame, dow
 
 ## What is on disk
 
-`BABYMON_DATA_DIR` holds `babymon.sqlite3` (events and the switches), `segments/` (5-minute MP4 files named by their UTC start), `snapshots/` (the frame behind each vision check and alert) and `reference.jpg`. Segments, snapshots and events older than 24 hours are deleted at start and every 5 minutes. The switches and the reference image are kept. A second `babymon run` on the same directory exits at once, so one data directory serves one process.
+`BABYMON_DATA_DIR` holds `babymon.sqlite3` (events, per-minute signal rollups and the switches), `segments/` (5-minute MP4 files named by their UTC start), `snapshots/` (the frame behind each vision check and alert) and `reference.jpg`. Segments and snapshots older than 24 hours, and events and minute rollups older than 90 days, are deleted at start and every 5 minutes. The switches and the reference image are kept. A second `babymon run` on the same directory exits at once, so one data directory serves one process.

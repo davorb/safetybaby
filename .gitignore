@@ -9,3 +9,4 @@ models/*.onnx
 models/yamnet_class_map.csv
 data/
 models/
+.dev/

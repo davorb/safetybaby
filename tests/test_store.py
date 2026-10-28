@@ -14,6 +14,7 @@ from babymon.domain import (
     CameraChanged,
     Controls,
     ControlsChanged,
+    MinuteRollup,
     Priority,
     SleepChanged,
     SleepState,
@@ -23,6 +24,7 @@ from babymon.domain import (
     VisionReason,
 )
 from babymon.store import (
+    EVENT_RETENTION,
     RETENTION,
     InstanceLockError,
     Store,
@@ -82,8 +84,19 @@ class TestSweep:
         assert remaining == [segment_name(t) for t in hourly if t >= horizon]
         assert not store.snapshot_path(old_snap).exists()
         assert store.snapshot_path(fresh_snap).exists()
-        assert (report.segments, report.snapshots, report.events) == (6, 1, 1)
-        assert [e.event.at for e in store.events(T0 - 40 * H, NOW)] == [horizon + 1 * H]
+        assert (report.segments, report.snapshots, report.events) == (6, 1, 0)
+
+    def test_events_outlive_media_and_go_after_ninety_days(self, store: Store):
+        event_horizon = NOW - EVENT_RETENTION
+        old, kept = event_horizon - 1 * H, event_horizon + 1 * H
+        day_old = NOW - RETENTION - 1 * H
+        for t in (old, kept, day_old):
+            store.append(sleep_changed(t, SleepState.ASLEEP, SleepState.STIRRING))
+
+        report = store.sweep(NOW)
+
+        assert report.events == 1
+        assert [e.event.at for e in store.events(old - H, NOW)] == [day_old, kept]
 
     def test_segment_covering_the_horizon_survives(self, store: Store):
         horizon = NOW - RETENTION
@@ -191,10 +204,11 @@ class TestRestore:
 
     def test_controls_survive_sweeping_their_events(self, store: Store):
         store.append(ControlsChanged(at=T0, controls=Controls(armed=False)))
-        store.sweep(NOW + 40 * H)
+        later = T0 + EVENT_RETENTION + 2 * H
+        store.sweep(later)
 
-        assert store.events(T0 - H, NOW + 40 * H) == []
-        assert store.restore(NOW + 40 * H, 600).controls == Controls(armed=False)
+        assert store.events(T0 - H, later) == []
+        assert store.restore(later, 600).controls == Controls(armed=False)
 
     def test_last_delivered_alert_per_kind_within_cooldown(self, store: Store):
         now = at(1000)
@@ -393,3 +407,54 @@ class TestInstanceLock:
     def test_creates_the_data_directory(self, tmp_path: Path):
         with acquire_instance_lock(tmp_path / "new" / "dir"):
             assert (tmp_path / "new" / "dir" / "babymon.lock").exists()
+
+
+def minute(t: datetime, **overrides: object) -> MinuteRollup:
+    base = dict(
+        at=t,
+        motion_samples=240,
+        motion_mean=0.01,
+        motion_peak=0.2,
+        audio_samples=60,
+        loudness_mean_db=3.0,
+        loudness_peak_db=9.0,
+        cry_peak=0.1,
+        cry_seconds=0,
+    )
+    return MinuteRollup(**{**base, **overrides})
+
+
+class TestMinutes:
+    def test_round_trip_oldest_first_with_half_open_window(self, store: Store):
+        rows = [minute(at(120)), minute(at(0), cry_seconds=7), minute(at(60), motion_mean=None)]
+        for r in rows:
+            store.append_minute(r)
+
+        assert store.minutes(at(0), at(120)) == [rows[1], rows[2]]
+
+    def test_the_same_minute_twice_is_one_row(self, store: Store):
+        store.append_minute(minute(at(0), cry_seconds=1))
+        store.append_minute(minute(at(0), cry_seconds=2))
+
+        assert [m.cry_seconds for m in store.minutes(at(0), at(60))] == [2]
+
+    def test_minutes_follow_the_event_retention_not_the_media_one(self, store: Store):
+        store.append_minute(minute(NOW - EVENT_RETENTION - H))
+        store.append_minute(minute(NOW - 2 * RETENTION))
+
+        report = store.sweep(NOW)
+
+        assert report.minutes == 1
+        assert [m.at for m in store.minutes(NOW - 100 * RETENTION, NOW)] == [NOW - 2 * RETENTION]
+
+    def test_events_of_one_kind_oldest_first_without_a_limit(self, store: Store):
+        for n in range(600):
+            store.append(CameraChanged(at=at(n), up=n % 2 == 0, detail=""))
+        store.append(sleep_changed(at(5), SleepState.ASLEEP, SleepState.STIRRING))
+
+        found = store.events_of(CameraChanged, at(0), at(1000))
+
+        assert len(found) == 600
+        assert [e.at for e in found] == [at(n) for n in range(600)]
+        assert store.last_event_before(CameraChanged, at(10)) == found[9]
+        assert store.last_event_before(CameraChanged, at(0)) is None

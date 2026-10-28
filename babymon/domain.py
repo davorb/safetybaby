@@ -244,6 +244,25 @@ class AudioSample:
 
 
 @dataclass(frozen=True, slots=True)
+class MinuteRollup:
+    """One UTC minute of motion and audio samples folded into a few numbers. The history
+    behind the statistics page: raw samples are not kept. Not an Event, so it stays out
+    of /api/events."""
+
+    at: Instant
+    """Start of the minute, seconds floored."""
+    motion_samples: int
+    motion_mean: float | None
+    motion_peak: float | None
+    audio_samples: int
+    loudness_mean_db: float | None
+    loudness_peak_db: float | None
+    cry_peak: float | None
+    cry_seconds: int
+    """Audio samples with cry_probability >= Tuning.cry_probability; one sample is one second."""
+
+
+@dataclass(frozen=True, slots=True)
 class VisionDone:
     at: Instant
     reason: VisionReason
@@ -303,6 +322,14 @@ type Fact = (
     | DeliveryResult
     | Tick
 )
+
+
+@dataclass(frozen=True, slots=True)
+class SleepSpan:
+    state: SleepState | None
+    """None for the part of the window before the first known state."""
+    start: Instant
+    end: Instant
 
 
 class SleepChanged(Frozen):

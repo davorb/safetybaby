@@ -11,6 +11,10 @@ Store. No route touches MonitorState.
     GET  /api/timeline?hours=24  list[SleepSpan]
     GET  /api/events?hours=24    events with snapshot URL and clip URL#t=offset;
                                  since_id=N keeps only ids above N
+    GET  /api/stats?days=7&tz=UTC  Stats over the last `days` (1..90), local-time fields
+                                 in the IANA zone `tz` (400 if unknown)
+    GET  /stats                  single HTML page, reads /api/stats
+    GET  /static/{name}          the shared base.css and tip.js, plain .css/.js names only
     POST /api/controls           {"armed"?: bool, "nap_mode"?: bool}
     POST /api/reference          store the current Still as the good-position reference
     GET  /media/snapshots/{name}, /media/segments/{name}
@@ -23,6 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse, HTMLResponse
@@ -30,20 +35,27 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from babymon.domain import (
     AlertSent,
+    CameraChanged,
     Fact,
     Instant,
     SetControls,
     Situation,
     SnapshotRef,
     Still,
+    Tuning,
     VisionObserved,
 )
 from babymon.latest import Latest
+from babymon.stats import Stats, StatsInput, compute
 from babymon.store import Store
 
 INDEX = Path(__file__).parent / "static" / "index.html"
+STATS_PAGE = Path(__file__).parent / "static" / "stats.html"
+ASSETS = Path(__file__).parent / "static"
+ASSET_SUFFIXES = {".css", ".js"}
 NO_STORE = {"Cache-Control": "no-store"}
 Hours = Annotated[float, Query(gt=0, le=24)]
+Days = Annotated[int, Query(ge=1, le=90)]
 
 
 def _utcnow() -> Instant:
@@ -57,6 +69,7 @@ class WebDeps:
     stills: Latest[Still]
     store: Store
     now: Callable[[], Instant] = _utcnow
+    tuning: Tuning = Tuning()
 
 
 class ControlsPatch(BaseModel):
@@ -86,6 +99,12 @@ def _media(resolve: Callable[[str], Path], name: str) -> FileResponse:
     return FileResponse(path)
 
 
+def _asset(name: str) -> Path:
+    if "/" in name or "\\" in name or Path(name).suffix not in ASSET_SUFFIXES:
+        raise ValueError(name)
+    return ASSETS / name
+
+
 def create_app(deps: WebDeps) -> FastAPI:
     app = FastAPI(title="babymon", docs_url=None, redoc_url=None, openapi_url=None)
     store = deps.store
@@ -93,6 +112,14 @@ def create_app(deps: WebDeps) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         return INDEX.read_text()
+
+    @app.get("/stats", response_class=HTMLResponse)
+    def stats_page() -> str:
+        return STATS_PAGE.read_text()
+
+    @app.get("/static/{name}")
+    def static_asset(name: str) -> FileResponse:
+        return _media(_asset, name)
 
     @app.get("/api/state")
     def state() -> Situation:
@@ -136,6 +163,29 @@ def create_app(deps: WebDeps) -> FastAPI:
                 }
             )
         return out
+
+    @app.get("/api/stats")
+    def stats(days: Days = 7, tz: str = "UTC") -> Stats:
+        try:
+            zone = ZoneInfo(tz)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            raise HTTPException(400, f"unknown time zone: {tz!r}") from None
+        until = deps.now()
+        since = until - timedelta(days=days)
+        return compute(
+            StatsInput(
+                start=since,
+                now=until,
+                tz=zone,
+                tuning=deps.tuning,
+                spans=store.sleep_timeline(since, until),
+                visions=store.events_of(VisionObserved, since, until),
+                alerts=store.events_of(AlertSent, since, until),
+                camera=store.events_of(CameraChanged, since, until),
+                camera_before=store.last_event_before(CameraChanged, since),
+                minutes=store.minutes(since, until),
+            )
+        )
 
     @app.post("/api/controls", status_code=202)
     def controls(patch: ControlsPatch) -> ControlsPatch:

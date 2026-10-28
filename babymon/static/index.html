@@ -6,52 +6,8 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0a0d16">
 <title>babymon</title>
+<link rel="stylesheet" href="/static/base.css">
 <style>
-  :root {
-    --asleep:#4f8cff; --stirring:#e8c14d; --awake:#f0903c; --crying:#ef4d43; --unknown:#8a90a0;
-    --asleep-rgb:79,140,255; --stirring-rgb:232,193,77; --awake-rgb:240,144,60; --crying-rgb:239,77,67; --unknown-rgb:138,144,160;
-    --text:#dde2ee; --muted:#8f98ad; --accent-rgb:120,160,255;
-    --glass:rgba(255,255,255,.06); --glass-strong:rgba(255,255,255,.1);
-    --edge:rgba(255,255,255,.13); --edge-soft:rgba(255,255,255,.07);
-    --blur:blur(22px) saturate(150%);
-  }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html { background: #090c14; color-scheme: dark; }
-  body { font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color: var(--text);
-         margin: 0 auto; max-width: 720px; min-height: 100vh;
-         padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-                  max(24px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
-
-  .ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
-             background: radial-gradient(120% 80% at 50% 0%, #131a2e 0%, #0b0f1b 55%, #080a12 100%); }
-  .ambient i { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5; will-change: transform;
-               animation: drift 38s ease-in-out infinite alternate; }
-  .ambient i:nth-child(1) { width: 60vmax; height: 60vmax; left: -22vmax; top: -18vmax; background: #2d3f9e; }
-  .ambient i:nth-child(2) { width: 50vmax; height: 50vmax; right: -20vmax; top: 24vh; background: #5a2f8f; animation-duration: 46s; }
-  .ambient i:nth-child(3) { width: 44vmax; height: 44vmax; left: 8vw; bottom: -22vmax; background: #135a6b; animation-duration: 52s; }
-  @keyframes drift { to { transform: translate3d(6vmax, 4vmax, 0) scale(1.12); } }
-
-  .glass { background: var(--glass); border: 1px solid var(--edge); border-radius: 22px;
-           -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
-           box-shadow: 0 10px 36px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.1); }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    :root { --glass: rgba(30,35,52,.92); }
-  }
-  .card { padding: 14px; margin-bottom: 14px; }
-  .card.plain { -webkit-backdrop-filter: none; backdrop-filter: none; padding: 6px; }
-
-  h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase;
-       letter-spacing: .09em; color: var(--muted); margin: 2px 2px 12px; }
-  h2 .info { margin-left: auto; }
-
-  .info { flex: none; width: 22px; height: 22px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center;
-          font: italic 600 12px/1 Georgia, serif; color: var(--muted); background: rgba(255,255,255,.07);
-          border: 1px solid var(--edge); cursor: help; }
-  .info:hover { color: var(--text); background: var(--glass-strong); }
-  [data-tip]:focus-visible, .switch input:focus-visible + .track { outline: 2px solid rgba(var(--accent-rgb), .8); outline-offset: 2px; }
-  [data-tip] { -webkit-touch-callout: none; }
-  [data-tip]:not(button):not(a):not(.info) { cursor: help; }
-
   #banners { display: grid; gap: 8px; margin-bottom: 14px; }
   #banners:empty { display: none; }
   .banner { --c: var(--crying-rgb); display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 16px;
@@ -77,15 +33,6 @@
   .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--crying); animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
 
-  button { font: inherit; color: inherit; }
-  .btn { padding: 9px 16px; border-radius: 999px; border: 1px solid var(--edge); background: var(--glass-strong);
-         -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); font-size: 14px; font-weight: 500; cursor: pointer;
-         transition: background .2s, transform .1s; }
-  .btn:hover { background: rgba(255,255,255,.16); }
-  .btn:active { transform: scale(.97); }
-  .btn.dark { background: rgba(12,15,24,.5); }
-  .btn.primary { background: rgba(var(--accent-rgb), .22); border-color: rgba(var(--accent-rgb), .5); }
-  .btn.primary:hover { background: rgba(var(--accent-rgb), .32); }
 
   .state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
   .pill { --c: var(--unknown-rgb); display: inline-flex; align-items: center; gap: 12px; padding: 10px 22px 10px 18px;
@@ -116,6 +63,7 @@
   .name { font-weight: 500; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 8px; padding-top: 12px;
              border-top: 1px solid var(--edge-soft); }
+  .stats-link { margin-left: auto; }
   #note { color: var(--muted); font-size: 14px; }
   #nap_hint { color: var(--muted); font-size: 14px; margin: 8px 2px 0; }
 
@@ -153,25 +101,10 @@
   .fact.bad { color: #ffd9d5; background: rgba(var(--crying-rgb), .28); border-color: rgba(var(--crying-rgb), .6); font-weight: 600; }
   .fact.adult { color: #d4c8ff; background: rgba(150,120,255,.18); border-color: rgba(150,120,255,.45); }
   li .detail { color: #bcc4d6; font-size: 14px; overflow-wrap: anywhere; }
-  a { color: #8db8ff; }
   a.clip { align-self: flex-start; font-size: 13px; text-decoration: none; padding: 1px 4px; border-radius: 6px; }
   a.clip:hover { text-decoration: underline; }
   .empty { color: var(--muted); text-align: center; padding: 18px 0 8px; font-size: 14px; }
 
-  #tip { position: fixed; left: 0; top: 0; z-index: 100; max-width: min(310px, calc(100vw - 16px)); padding: 11px 14px;
-         border-radius: 16px; font-size: 13.5px; line-height: 1.45; color: #e6eaf4; white-space: pre-line;
-         background: rgba(22,27,42,.72); border: 1px solid rgba(255,255,255,.18);
-         -webkit-backdrop-filter: blur(22px) saturate(160%); backdrop-filter: blur(22px) saturate(160%);
-         box-shadow: 0 14px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.14);
-         opacity: 0; visibility: hidden; transform: translateY(4px); pointer-events: none;
-         transition: opacity .15s, transform .15s, visibility .15s; }
-  #tip.on { opacity: 1; visibility: visible; transform: none; pointer-events: auto; }
-  #tip b { color: #fff; font-weight: 650; }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { #tip { background: rgba(22,27,42,.97); } }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition: none !important; }
-  }
   @media (max-width: 420px) {
     .pill { font-size: 25px; }
     li img { width: 80px; height: 45px; }
@@ -214,6 +147,7 @@
     <button type="button" class="btn primary" id="reference" data-act data-tipkey="reference">Set reference</button>
     <button type="button" class="info" aria-label="About Set reference" data-tipkey="reference">i</button>
     <span id="note" role="status"></span>
+    <a class="btn stats-link" href="/stats">Statistics</a>
   </div>
 </section>
 
@@ -230,11 +164,11 @@
 </section>
 
 <div id="tip" role="tooltip"></div>
+<script src="/static/tip.js"></script>
 <script>
 const COLORS = {asleep:'var(--asleep)', stirring:'var(--stirring)', awake:'var(--awake)',
                 crying:'var(--crying)', unknown:'var(--unknown)'};
 const HOURS = 24;
-const $ = id => document.getElementById(id);
 let holdControlsUntil = 0;
 
 const STATE_MEANING = {
@@ -307,76 +241,6 @@ const get = async path => {
 };
 const post = (path, body) => fetch(path, {method: 'POST', headers: {'content-type': 'application/json'},
                                           body: JSON.stringify(body)});
-
-function el(tag, cls, text, tip) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;
-  if (tip) { n.dataset.tip = tip; n.tabIndex = 0; }
-  return n;
-}
-
-const tipEl = $('tip');
-let tipFor = null, tipPinned = false;
-
-function fillTip(text) {
-  tipEl.replaceChildren(...text.split('\n').flatMap((line, i) => {
-    const m = line.match(/^([^:.]{1,24}):\s+(.*)$/);
-    const nodes = m ? [el('b', '', m[1] + ':'), document.createTextNode(' ' + m[2])] : [document.createTextNode(line)];
-    return i ? [document.createTextNode('\n'), ...nodes] : nodes;
-  }));
-}
-
-function placeTip() {
-  if (!tipFor) return;
-  const r = tipFor.getBoundingClientRect();
-  const w = tipEl.offsetWidth, h = tipEl.offsetHeight, m = 8;
-  const left = Math.min(Math.max(r.left + r.width / 2 - w / 2, m), innerWidth - w - m);
-  const above = r.top - h - 10;
-  tipEl.style.left = left + 'px';
-  tipEl.style.top = (above >= m ? above : Math.min(r.bottom + 10, innerHeight - h - m)) + 'px';
-}
-
-function showTip(target, pin) {
-  if (tipFor && tipFor !== target) tipFor.removeAttribute('aria-describedby');
-  tipFor = target;
-  tipPinned = pin;
-  fillTip(target.dataset.tip);
-  target.setAttribute('aria-describedby', 'tip');
-  placeTip();
-  tipEl.classList.add('on');
-}
-
-function hideTip() {
-  if (tipFor) tipFor.removeAttribute('aria-describedby');
-  tipFor = null;
-  tipPinned = false;
-  tipEl.classList.remove('on');
-}
-
-const sweepTip = () => { if (tipFor && !tipFor.isConnected) hideTip(); };
-
-document.addEventListener('pointerover', ev => {
-  if (ev.pointerType !== 'mouse' || ev.target.closest('#tip')) return;
-  const t = ev.target.closest('[data-tip]');
-  if (t && t !== tipFor) showTip(t, false);
-  else if (!t && !tipPinned) hideTip();
-});
-document.addEventListener('click', ev => {
-  if (ev.target.closest('#tip')) return;
-  const t = ev.target.closest('[data-tip]');
-  if (!t || t.hasAttribute('data-act')) hideTip();
-  else if (t === tipFor && tipPinned) hideTip();
-  else showTip(t, true);
-});
-document.addEventListener('focusin', ev => {
-  const t = ev.target.closest('[data-tip]');
-  if (t && t.matches(':focus-visible')) showTip(t, false);
-});
-document.addEventListener('focusout', ev => { if (ev.target === tipFor && !tipPinned) hideTip(); });
-document.addEventListener('keydown', ev => { if (ev.key === 'Escape') hideTip(); });
-addEventListener('scroll', placeTip, true);
-addEventListener('resize', placeTip);
 
 function duration(s) {
   s = Math.round(s);

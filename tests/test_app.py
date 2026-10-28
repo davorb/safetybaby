@@ -28,9 +28,11 @@ from babymon.domain import (
     Alert,
     AlertKind,
     AlertSent,
+    AudioSample,
     CameraStatus,
     ControlsChanged,
     Instant,
+    MotionSample,
     Observation,
     Priority,
     SetControls,
@@ -273,3 +275,18 @@ async def test_ticks_strictly_increase_even_when_the_clock_does_not(monkeypatch)
     instants = [t.at for t in ticks[:3]]
     assert instants[0] > startup
     assert instants == sorted(set(instants))
+
+
+async def test_samples_reach_the_store_as_finished_minutes(tmp_path: Path):
+    cfg, base = settings(tmp_path), utcnow().replace(second=0, microsecond=0)
+    store = Store.open(cfg.data_dir)
+
+    async with running(cfg, FakeCamera(), ScriptedVision([]), RecordingNotifier()) as out:
+        out.publish(MotionSample(base + timedelta(seconds=5), 0.04))
+        out.publish(AudioSample(base + timedelta(seconds=6), 2.0, cry_probability=0.9))
+        out.publish(Tick(base + timedelta(seconds=61)))
+        await until(lambda: len(store.minutes(base, base + HOUR)) == 1)
+
+    [m] = store.minutes(base, base + HOUR)
+    assert (m.at, m.motion_samples, m.audio_samples, m.cry_seconds) == (base, 1, 1, 1)
+    assert store.events(base - HOUR, base + HOUR) == []
