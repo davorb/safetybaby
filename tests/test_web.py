@@ -279,7 +279,7 @@ class TestStats:
             )
         )
         store.append_minute(
-            MinuteRollup(NOW - timedelta(hours=2), 240, 0.01, 0.05, 60, 2.0, 5.0, 0.1, 0)
+            MinuteRollup(NOW - timedelta(minutes=1), 240, 0.01, 0.05, 60, 2.0, 5.0, 0.1, 0)
         )
         deps = WebDeps(lambda f: None, Latest(), Latest(), store, lambda: NOW)
         return TestClient(create_app(deps))

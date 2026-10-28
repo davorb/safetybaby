@@ -32,6 +32,9 @@ class Coverage(Frozen):
     camera_up_s: float
     camera_down_s: float
     camera_unknown_s: float
+    process_gap_s: float
+    """Time the process was not running (a hole in the minute rollups, or a restart). Counted
+    as unknown, not as a continuation of the last sleep state."""
     fraction_covered: float
     """sleep_known_s / window_s."""
     days_with_data: int

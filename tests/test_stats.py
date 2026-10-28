@@ -431,3 +431,64 @@ class TestAlertsAndSignals:
         dwell = {d.state: d for d in result.dwell}
         assert dwell[A].n == 2 and dwell[A].mean_s == 600
         assert dwell[W].n == 0 and dwell[W].n_censored == 2
+
+
+class TestProcessGaps:
+    def up(self, at):
+        return CameraChanged(at=at, up=True, detail="")
+
+    def test_a_restart_cuts_the_sleep_state_back_to_the_last_sign_of_life(self):
+        t = utc("2026-10-27T22:00")
+        spans = timeline(t, (A, 8 * H))
+        camera = [self.up(t - H), self.up(t + 7 * H)]
+        visions = [check(t + 10 * MIN)]
+
+        result = stats(spans, camera=camera, visions=visions)
+
+        assert result.coverage.process_gap_s == 6 * 3600 + 50 * 60
+        assert result.coverage.sleep_known_s == 70 * 60
+        assert (result.bouts.n, result.bouts.n_censored, result.bouts.longest_s) == (1, 1, 600)
+        assert by_state(result.state_totals)[S] == 3600
+
+    def test_a_camera_that_went_down_and_up_is_not_a_restart(self):
+        t = utc("2026-10-27T22:00")
+        camera = [
+            CameraChanged(at=t + H, up=False, detail=""),
+            CameraChanged(at=t + 2 * H, up=True, detail=""),
+        ]
+
+        result = stats(timeline(t, (A, 4 * H)), camera=camera, camera_before=self.up(t - H))
+
+        assert result.coverage.process_gap_s == 0
+        assert result.coverage.sleep_known_s == 3 * 3600
+
+    def test_a_hole_in_the_minute_rollups_is_unknown_time(self):
+        t = utc("2026-10-27T22:00")
+
+        def row(offset):
+            return MinuteRollup(t + offset * MIN, 240, 0.0, 0.0, 60, 0.0, 0.0, 0.0, 0)
+
+        minutes = [row(0), row(1), row(2), row(60), row(61)]
+        result = stats(timeline(t, (A, 62 * MIN)), minutes=minutes)
+
+        assert result.coverage.process_gap_s == 57 * 60
+        assert result.coverage.sleep_known_s == 5 * 60
+        assert result.coverage.minutes_with_data == 5
+
+    def test_a_recent_sleep_state_survives_a_restart(self):
+        t = utc("2026-10-27T22:00")
+        spans = timeline(t, (W, 2 * MIN), (A, 30 * MIN))
+        camera = [self.up(t - H), self.up(t + 8 * MIN)]
+
+        result = stats(spans, camera=camera)
+
+        assert by_state(result.state_totals)[S] == 0
+
+    def test_a_vision_reading_does_not_hold_across_a_restart(self):
+        t = utc("2026-10-27T22:00")
+        camera = [self.up(t - H), self.up(t + 5 * MIN)]
+        visions = [check(t + MIN, body="back")]
+
+        result = stats(timeline(t, (A, H)), camera=camera, visions=visions)
+
+        assert {s.value: s.seconds for s in result.vision.body.shares}["back"] == 0

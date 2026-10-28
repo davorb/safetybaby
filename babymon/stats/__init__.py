@@ -18,9 +18,17 @@ __all__ = ["Stats", "StatsInput", "compute"]
 
 def compute(inp: StatsInput) -> Stats:
     camera = timeline.camera_timeline(inp.camera, inp.camera_before, inp.start, inp.now)
-    spans = timeline.observed_spans(inp.spans, camera.down, inp.start, inp.now)
-    calendar = Calendar(inp.start, inp.now, inp.tz)
-    ctx = Context(inp, calendar, spans, camera.down)
+    gaps = timeline.liveness_gaps(
+        inp.minutes,
+        inp.camera,
+        inp.camera_before,
+        [e.at for e in (*inp.visions, *inp.alerts)],
+        inp.now,
+    )
+    blanked = timeline.merged([*camera.down, *gaps])
+    resumed = timeline.reset_after_restarts(inp.spans, inp.camera, inp.camera_before)
+    spans = timeline.observed_spans(resumed, blanked, inp.start, inp.now)
+    ctx = Context(inp, Calendar(inp.start, inp.now, inp.tz), spans, blanked, gaps)
 
     bouts = timeline.bouts(spans)
     episodes = timeline.crying_episodes(spans)
@@ -58,6 +66,7 @@ def _coverage(ctx: Context, camera: timeline.CameraTimeline, days: list[DayRow])
         camera_up_s=sum((hi - lo).total_seconds() for lo, hi in camera.up),
         camera_down_s=sum((hi - lo).total_seconds() for lo, hi in camera.down),
         camera_unknown_s=sum((hi - lo).total_seconds() for lo, hi in camera.unknown),
+        process_gap_s=sum((hi - lo).total_seconds() for lo, hi in ctx.gaps),
         fraction_covered=known / window if window else 0.0,
         days_with_data=sum(r.covered_s > 0 for r in days),
         minutes_with_data=len(inp.minutes),

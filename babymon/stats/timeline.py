@@ -15,9 +15,13 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import timedelta
 
-from babymon.domain import CameraChanged, Instant, SleepSpan, SleepState
+from babymon.domain import CameraChanged, Instant, MinuteRollup, SleepSpan, SleepState
+from babymon.sleep import RESUME_WITHIN
 
 BRIEF_AROUSAL = timedelta(minutes=3)
+LIVENESS_GAP = timedelta(minutes=3)
+"""Minute rollups arrive every minute while the camera is up, so a longer hole in them
+means the process was not running."""
 
 type Interval = tuple[Instant, Instant]
 
@@ -45,6 +49,75 @@ def camera_timeline(
         if event:
             state = event.up
     return CameraTimeline(up, down, unknown)
+
+
+def liveness_gaps(
+    minutes: Sequence[MinuteRollup],
+    camera: Sequence[CameraChanged],
+    camera_before: CameraChanged | None,
+    evidence: Iterable[Instant],
+    now: Instant,
+) -> list[Interval]:
+    """Stretches when the process was not running, though no CameraChanged says so. The
+    store keeps the last sleep state through them, so they would read as confident sleep.
+
+    Two signs. A hole between minute rollups (or after the last one). And two consecutive
+    up events: the brain emits one only on a change, so the second means a restart, and
+    the process was away since the last sign of life before it (`evidence` holds the
+    instants of vision checks and alerts)."""
+    gaps: list[Interval] = []
+    ends = sorted(m.at + timedelta(minutes=1) for m in minutes)
+    for before, after in zip(ends, ends[1:], strict=False):
+        if after - timedelta(minutes=1) - before > LIVENESS_GAP:
+            gaps.append((before, after - timedelta(minutes=1)))
+    if ends and now - ends[-1] > LIVENESS_GAP:
+        gaps.append((ends[-1], now))
+    life = sorted([*evidence, *ends])
+    for previous, event in _restarts(camera, camera_before):
+        gaps.append((max([previous.at, *(t for t in life if t < event.at)]), event.at))
+    return merged(gaps)
+
+
+def _restarts(
+    camera: Sequence[CameraChanged], before: CameraChanged | None
+) -> list[tuple[CameraChanged, CameraChanged]]:
+    pairs = zip([before, *camera], camera, strict=False)
+    return [(a, b) for a, b in pairs if a is not None and a.up and b.up]
+
+
+def reset_after_restarts(
+    spans: Sequence[SleepSpan],
+    camera: Sequence[CameraChanged],
+    before: CameraChanged | None,
+) -> list[SleepSpan]:
+    """A new process resumes the stored sleep state only if it is under ten minutes old,
+    else it starts in STIRRING, and writes nothing until the state changes. The store
+    would show the old state until then, so from each restart to the next change the
+    state is STIRRING."""
+    out = list(spans)
+    for _, restart in _restarts(camera, before):
+        for i, span in enumerate(out):
+            if span.start <= restart.at < span.end:
+                stale = span.state not in (None, SleepState.STIRRING)
+                if stale and restart.at - span.start >= RESUME_WITHIN:
+                    out[i : i + 1] = [
+                        SleepSpan(span.state, span.start, restart.at),
+                        SleepSpan(SleepState.STIRRING, restart.at, span.end),
+                    ]
+                break
+    return out
+
+
+def merged(intervals: Iterable[Interval]) -> list[Interval]:
+    out: list[Interval] = []
+    for lo, hi in sorted(intervals):
+        if hi <= lo:
+            continue
+        if out and lo <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], hi))
+        else:
+            out.append((lo, hi))
+    return out
 
 
 def observed_spans(

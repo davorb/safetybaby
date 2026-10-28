@@ -122,14 +122,15 @@ def _held_seconds(
     ctx: Context, confident: Sequence[VisionObserved]
 ) -> list[tuple[VisionObserved, float]]:
     """A confident reading holds until the next reading of any confidence, at most
-    vision_period_quiet_s, and never across a stretch the camera was down."""
+    vision_period_quiet_s, and stops where the camera or the process went away."""
     cap = timedelta(seconds=ctx.inp.tuning.vision_period_quiet_s)
     every = sorted(ctx.inp.visions, key=lambda v: v.at)
     following = {id(v): n.at for v, n in zip(every, every[1:], strict=False)}
     out = []
     for obs in confident:
         end = min(following.get(id(obs), ctx.inp.now), obs.at + cap, ctx.inp.now)
-        out.append((obs, _seconds(subtract(obs.at, end, ctx.down))))
+        pieces = subtract(obs.at, end, ctx.blanked)
+        out.append((obs, _seconds(pieces[:1]) if pieces and pieces[0][0] == obs.at else 0.0))
     return out
 
 

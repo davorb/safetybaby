@@ -41,5 +41,7 @@ class Context:
     inp: StatsInput
     calendar: Calendar
     spans: Sequence[SleepSpan]
-    """Observed: camera-down time is blanked to state None."""
-    down: Sequence[Interval]
+    """Observed: camera-down and process-gap time is blanked to state None."""
+    blanked: Sequence[Interval]
+    gaps: Sequence[Interval]
+    """Stretches the process was not running; a subset of `blanked`."""
