@@ -48,8 +48,8 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         AlertKind.CRYING,
-        lambda s, t: s.sleep is SleepState.CRYING and s.sleep_for_s > t.crying_alert_s,
-        lambda s: f"Crying for {s.sleep_for_s:.0f} s",
+        lambda s, t: s.sleep is SleepState.CRYING and s.crying_for_s >= t.crying_alert_s,
+        lambda s: f"Crying for {s.crying_for_s:.0f} s",
     ),
     Rule(
         AlertKind.AWAKE_DURING_NAP,

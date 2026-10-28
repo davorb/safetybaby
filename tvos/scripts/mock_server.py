@@ -44,7 +44,7 @@ def state() -> dict:
         "camera_down_for_s": 130.0 if scenario == "offline" else 0.0,
         "sleep": "crying" if scenario == "high" else "asleep",
         "sleep_for_s": 72.0 if scenario == "high" else 5040.0,
-        "observation": {"body": "back", "head": "center", "face_covered": False, "in_crib": True,
+        "observation": {"body": "back", "head": "center", "face_covered": False, "location": "crib",
                         "eyes": "closed", "confidence": 0.91},
         "observation_age_s": 14.0,
         "face_covered_streak": {"pending": 1, "emergency": 2}.get(scenario, 0),

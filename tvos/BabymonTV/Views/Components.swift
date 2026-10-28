@@ -171,12 +171,22 @@ struct PositionCard: View {
                 ReadingValue(label: "Body", value: Self.body(o.body), uncertain: low, dim: late)
                 ReadingValue(label: "Head", value: Self.head(o.head), uncertain: low, dim: late)
                 ReadingValue(label: "Face", value: o.faceCovered ? "Covered" : "Clear", uncertain: low, dim: late)
-                ReadingValue(label: "Crib", value: o.inCrib ? "In crib" : "Out of crib", dim: late)
+                ReadingValue(label: "Where", value: Self.location(o.location), dim: late)
                 ReadingValue(label: "Eyes", value: o.eyes.capitalized, dim: late)
             }
             if low {
                 Text("Below 50 %. This reading cannot trigger an alert.").font(.ui(26)).foregroundStyle(Theme.high)
             }
+        }
+    }
+
+    static func location(_ raw: String) -> String {
+        switch raw {
+        case "crib": "In crib"
+        case "parents_bed": "In our bed"
+        case "held": "Held"
+        case "not_visible": "Not visible"
+        default: raw.capitalized
         }
     }
 

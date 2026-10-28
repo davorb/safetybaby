@@ -63,14 +63,14 @@ docker compose logs -f
 
 ## Alerts
 
-Each rule fires at most once per `BABYMON_TUNING__ALERT_COOLDOWN_S` (default 600 s) per kind, and only while armed. A condition that still holds after the cooldown fires again. A delivery that fails clears the cooldown so the next second tries again. The thresholds below are the defaults in `.env.example`.
+Each rule fires at most once per `BABYMON_TUNING__ALERT_COOLDOWN_S` (default 600 s) per kind, and only while armed. A condition that still holds after the cooldown fires again. Crying is the exception: a new crying episode alerts at once even inside the cooldown, and the cooldown only limits repeats within one episode. A delivery that fails clears the cooldown so the next second tries again. The thresholds below are the defaults in `.env.example`.
 
 | Alert | Priority | Fires when |
 | --- | --- | --- |
 | Face covered | emergency | The nose or mouth is covered on 2 consecutive confident checks. |
 | Baby on stomach | emergency | The baby is face down on 2 consecutive confident checks. |
 | Head turned left | high | Every confident check for more than 120 s has the head turned to the baby's left. |
-| Crying | high | The sleep state has been crying for more than 60 s. |
+| Crying | high | The baby has cried for 3 s (`BABYMON_TUNING__CRYING_ALERT_S`). |
 | Awake | normal | Nap mode is on and the sleep state is awake. |
 | Camera offline | high | No video for more than 60 s, including right after a start. |
 

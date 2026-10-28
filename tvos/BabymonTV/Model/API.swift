@@ -15,12 +15,12 @@ struct Reading: Codable, Equatable {
     var body: String
     var head: String
     var faceCovered: Bool
-    var inCrib: Bool
+    var location: String
     var eyes: String
     var confidence: Double
     enum CodingKeys: String, CodingKey {
-        case body, head, eyes, confidence
-        case faceCovered = "face_covered", inCrib = "in_crib"
+        case body, head, eyes, confidence, location
+        case faceCovered = "face_covered"
     }
 }
 

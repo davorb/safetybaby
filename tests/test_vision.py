@@ -15,6 +15,7 @@ from pydantic import SecretStr
 
 from babymon.config import VisionConfig
 from babymon.domain import (
+    BabyLocation,
     BodyPosition,
     Eyes,
     HeadDirection,
@@ -52,7 +53,8 @@ READING = {
     "body": "side_left",
     "head": "left",
     "face_covered": False,
-    "in_crib": True,
+    "location": "parents_bed",
+    "adult_present": True,
     "eyes": "closed",
     "confidence": 0.82,
 }
@@ -149,7 +151,8 @@ class TestClaudeVision:
             body=BodyPosition.SIDE_LEFT,
             head=HeadDirection.LEFT,
             face_covered=False,
-            in_crib=True,
+            location=BabyLocation.PARENTS_BED,
+            adult_present=True,
             eyes=Eyes.CLOSED,
             confidence=0.82,
         )
@@ -207,6 +210,32 @@ class TestClaudeVision:
         assert "infrared" in prompt
         assert "baby's left appears on the viewer's right" in prompt
         assert "nose or mouth" in prompt
+
+    def test_prompt_keeps_an_adult_in_the_room_out_of_the_babys_reading(self):
+        prompt = system_prompt(False)
+
+        assert "Never report an adult's body, head, face, or eyes as the baby's" in prompt
+
+    def test_prompt_places_the_crib_and_the_parents_bed(self):
+        prompt = system_prompt(False)
+
+        assert "crib stands in the middle of the image" in prompt
+        assert "parents' bed is at the top of the image" in prompt
+
+    @pytest.mark.parametrize(
+        ("in_crib", "location"), [(True, BabyLocation.CRIB), (False, BabyLocation.NOT_VISIBLE)]
+    )
+    def test_an_observation_stored_with_in_crib_reads_as_a_location(
+        self, in_crib: bool, location: BabyLocation
+    ):
+        stored = {k: v for k, v in READING.items() if k != "location"} | {"in_crib": in_crib}
+
+        assert Observation.model_validate(stored).location is location
+
+    def test_an_observation_stored_before_adult_present_reads_as_no_adult(self):
+        stored = {k: v for k, v in READING.items() if k != "adult_present"}
+
+        assert Observation.model_validate(stored).adult_present is False
 
     @pytest.mark.parametrize("stop_reason", ["refusal", "max_tokens"])
     async def test_a_stop_other_than_end_turn_is_a_vision_error(self, stop_reason: str):

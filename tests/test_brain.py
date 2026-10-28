@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pytest
+
 from babymon.domain import (
     AlertKind,
+    BabyLocation,
     BodyPosition,
     CameraChanged,
     CameraStatus,
@@ -65,11 +68,18 @@ def test_safe_reading_resets_the_streak(run: Run):
     assert run.situation().stomach_streak == 1
 
 
-def test_out_of_crib_resets_every_streak(run: Run):
+@pytest.mark.parametrize("location", [BabyLocation.HELD, BabyLocation.NOT_VISIBLE])
+def test_held_or_unseen_resets_every_streak(run: Run, location: BabyLocation):
     run.feed(seen(0, STOMACH), seen(0, COVERED), seen(10, LEFT))
-    run.feed(seen(20, observation(body=BodyPosition.STOMACH, in_crib=False)), Tick(at(21)))
+    run.feed(seen(20, observation(body=BodyPosition.STOMACH, location=location)), Tick(at(21)))
     s = run.situation()
     assert (s.stomach_streak, s.face_covered_streak, s.head_left_for_s) == (0, 0, 0.0)
+
+
+def test_stomach_in_the_parents_bed_is_an_emergency(run: Run):
+    in_bed = observation(body=BodyPosition.STOMACH, location=BabyLocation.PARENTS_BED)
+    run.feed(seen(0, in_bed), seen(15, in_bed), Tick(at(31)))
+    assert run.alerts() == [(at(31), AlertKind.ON_STOMACH, Priority.EMERGENCY)]
 
 
 def test_failed_check_leaves_streaks_unchanged(run: Run):
@@ -89,10 +99,31 @@ def test_head_turned_back_restarts_the_clock(run: Run):
     assert run.situation().head_left_for_s == 100.0
 
 
-def test_crying_over_a_minute_is_high(run: Run):
+def test_three_seconds_of_crying_alerts_at_once(run: Run):
     run.seconds(1, 70, cry=0.9)
-    assert run.alerts() == [(at(65), AlertKind.CRYING, Priority.HIGH)]
+    assert run.alerts() == [(at(4), AlertKind.CRYING, Priority.HIGH)]
     assert run.situation().sleep is SleepState.CRYING
+
+
+def test_two_seconds_of_crying_is_not_enough(run: Run):
+    run.seconds(1, 2, cry=0.9).seconds(3, 10, cry=0.0)
+    assert run.alerts() == []
+
+
+def test_new_crying_episode_skips_the_cooldown(run: Run):
+    run.seconds(1, 10, cry=0.9).seconds(11, 40).seconds(41, 50, cry=0.9)
+    assert run.alerts() == [
+        (at(4), AlertKind.CRYING, Priority.HIGH),
+        (at(44), AlertKind.CRYING, Priority.HIGH),
+    ]
+
+
+def test_one_long_crying_episode_re_alerts_only_after_the_cooldown(run: Run):
+    run.seconds(1, 610, cry=0.9)
+    assert run.alerts() == [
+        (at(4), AlertKind.CRYING, Priority.HIGH),
+        (at(604), AlertKind.CRYING, Priority.HIGH),
+    ]
 
 
 def test_awake_during_nap_is_normal():

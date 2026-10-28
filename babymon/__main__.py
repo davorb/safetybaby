@@ -95,7 +95,7 @@ def _event_summary(event: Event) -> str:
             o = event.observation
             return (
                 f"{event.reason} body={o.body} head={o.head} eyes={o.eyes} "
-                f"face_covered={o.face_covered} in_crib={o.in_crib} confidence={o.confidence}"
+                f"face_covered={o.face_covered} location={o.location} confidence={o.confidence}"
             )
         case "alert":
             return f"{event.alert.kind} delivered={event.delivered}"
