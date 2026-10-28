@@ -214,7 +214,13 @@ async def run(
                 tg.create_task(backends.ticker(publish, now))
                 tg.create_task(run_retention(store))
                 if backends.serve_http is not None:
-                    deps = WebDeps(publish=publish, situation=published, stills=stills, store=store)
+                    deps = WebDeps(
+                        publish=publish,
+                        situation=published,
+                        stills=stills,
+                        store=store,
+                        tuning=tuning,
+                    )
                     tg.create_task(backends.serve_http(create_app(deps)))
                 tg.create_task(stop_on_sigterm())
         except* _Stop:
