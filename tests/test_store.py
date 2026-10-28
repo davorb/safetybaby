@@ -23,6 +23,7 @@ from babymon.domain import (
     VisionReason,
 )
 from babymon.store import (
+    EVENT_RETENTION,
     RETENTION,
     InstanceLockError,
     Store,
@@ -82,8 +83,19 @@ class TestSweep:
         assert remaining == [segment_name(t) for t in hourly if t >= horizon]
         assert not store.snapshot_path(old_snap).exists()
         assert store.snapshot_path(fresh_snap).exists()
-        assert (report.segments, report.snapshots, report.events) == (6, 1, 1)
-        assert [e.event.at for e in store.events(T0 - 40 * H, NOW)] == [horizon + 1 * H]
+        assert (report.segments, report.snapshots, report.events) == (6, 1, 0)
+
+    def test_events_outlive_media_and_go_after_ninety_days(self, store: Store):
+        event_horizon = NOW - EVENT_RETENTION
+        old, kept = event_horizon - 1 * H, event_horizon + 1 * H
+        day_old = NOW - RETENTION - 1 * H
+        for t in (old, kept, day_old):
+            store.append(sleep_changed(t, SleepState.ASLEEP, SleepState.STIRRING))
+
+        report = store.sweep(NOW)
+
+        assert report.events == 1
+        assert [e.event.at for e in store.events(old - H, NOW)] == [day_old, kept]
 
     def test_segment_covering_the_horizon_survives(self, store: Store):
         horizon = NOW - RETENTION
@@ -191,10 +203,11 @@ class TestRestore:
 
     def test_controls_survive_sweeping_their_events(self, store: Store):
         store.append(ControlsChanged(at=T0, controls=Controls(armed=False)))
-        store.sweep(NOW + 40 * H)
+        later = T0 + EVENT_RETENTION + 2 * H
+        store.sweep(later)
 
-        assert store.events(T0 - H, NOW + 40 * H) == []
-        assert store.restore(NOW + 40 * H, 600).controls == Controls(armed=False)
+        assert store.events(T0 - H, later) == []
+        assert store.restore(later, 600).controls == Controls(armed=False)
 
     def test_last_delivered_alert_per_kind_within_cooldown(self, store: Store):
         now = at(1000)

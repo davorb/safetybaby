@@ -85,7 +85,7 @@ decider: Decider = RulesDecider(
 
 **Restart convergence** (per make-operations-idempotent). Each item is derived from disk, not remembered.
 - ffmpeg: each supervisor attempt starts from nothing (new pipes, process, meter). A stall watchdog applies, plus capped backoff.
-- Ring buffer: file names are timestamps, so the directory listing is the index. `Store.sweep(now)` deletes what is older than 24 h. It runs at startup and every 5 minutes, and running it twice is a no-op.
+- Ring buffer: file names are timestamps, so the directory listing is the index. `Store.sweep(now)` deletes media older than 24 h and event rows older than 90 days. It runs at startup and every 5 minutes, and running it twice is a no-op.
 - Cooldowns: `Store.restore` rebuilds the ledger from `AlertSent` rows with `delivered=True` only. If the process crashed between deciding and delivering, it re-alerts instead of staying silent.
 - Controls: `ControlsChanged` events upsert a never-pruned controls row in the same transaction. The log and the row cannot drift.
 - Sleep: the last `SleepChanged` resumes if it is under 10 minutes old. Otherwise STIRRING (see above).

@@ -1,6 +1,6 @@
 """Everything on disk, behind one object. The only module that knows the layout:
 
-    <data_dir>/babymon.sqlite3     events (24 h), controls (one row, never pruned)
+    <data_dir>/babymon.sqlite3     events (90 d), controls (one row, never pruned)
     <data_dir>/snapshots/          <UTC %Y%m%d-%H%M%S>-<label>.jpg   (24 h)
     <data_dir>/segments/           <UTC %Y%m%d-%H%M%S>.mp4  written by ffmpeg (24 h)
     <data_dir>/reference.jpg       the "good position" image, never pruned
@@ -44,6 +44,9 @@ from babymon.domain import (
 )
 
 RETENTION = timedelta(hours=24)
+"""Media: segments and snapshots."""
+EVENT_RETENTION = timedelta(days=90)
+"""Event rows are small and are the history the statistics page reads."""
 SLEEP_RESUME_WINDOW = timedelta(minutes=10)
 GROWING_IF_WRITTEN_WITHIN = timedelta(seconds=30)
 CLIP_END_SLACK = timedelta(seconds=10)
@@ -226,9 +229,9 @@ class Store:
         _write_atomically(self._dir / "reference.jpg", still.jpeg)
 
     def sweep(self, now: Instant) -> SweepReport:
-        """Delete segments, snapshots and event rows older than now - RETENTION.
-        Segments are judged by the *next* segment's start, so the file covering
-        the horizon survives. Converges no matter how many times it runs."""
+        """Delete segments and snapshots older than now - RETENTION and event rows older
+        than now - EVENT_RETENTION. Segments are judged by the *next* segment's start, so
+        the file covering the horizon survives. Converges no matter how many times it runs."""
         horizon = now - RETENTION
         segments = self._segment_listing()
         expired_segments = [
@@ -246,7 +249,9 @@ class Store:
         for path in expired_snapshots:
             path.unlink(missing_ok=True)
         with closing(self._connect()) as conn, conn:
-            events = conn.execute("DELETE FROM events WHERE at_us < ?", (_us(horizon),)).rowcount
+            events = conn.execute(
+                "DELETE FROM events WHERE at_us < ?", (_us(now - EVENT_RETENTION),)
+            ).rowcount
         return SweepReport(len(expired_segments), len(expired_snapshots), events)
 
     def restore(self, now: Instant, cooldown_s: float) -> Restored:

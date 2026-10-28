@@ -97,4 +97,4 @@ Each check sends up to two JPEG images, the reference and the current frame, dow
 
 ## What is on disk
 
-`BABYMON_DATA_DIR` holds `babymon.sqlite3` (events and the switches), `segments/` (5-minute MP4 files named by their UTC start), `snapshots/` (the frame behind each vision check and alert) and `reference.jpg`. Segments, snapshots and events older than 24 hours are deleted at start and every 5 minutes. The switches and the reference image are kept. A second `babymon run` on the same directory exits at once, so one data directory serves one process.
+`BABYMON_DATA_DIR` holds `babymon.sqlite3` (events and the switches), `segments/` (5-minute MP4 files named by their UTC start), `snapshots/` (the frame behind each vision check and alert) and `reference.jpg`. Segments and snapshots older than 24 hours, and events older than 90 days, are deleted at start and every 5 minutes. The switches and the reference image are kept. A second `babymon run` on the same directory exits at once, so one data directory serves one process.
