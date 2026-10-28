@@ -73,9 +73,9 @@ decider: Decider = RulesDecider(
 **Three tables instead of branch chains** (per model-the-domain).
 - `sleep.TRANSITIONS[state][signal] -> Edge(to, dwell_s)`. Evidence is first reduced to one `Signal` by fixed precedence (CRYING > ACTIVE > EYES_OPEN > MOVING > QUIET). Dwell is tracked per target state, so mixed MOVING and ACTIVE seconds both count toward AWAKE. The unknown start state is STIRRING, which no rule alerts on. A restart therefore cannot fake an "awake during nap".
 - `rules.RULES`, one `Rule(kind, holds, reason)` row per alert condition. The decider answers only "which conditions hold". It sees precomputed streaks and durations (`face_covered_streak`, `head_left_for_s`, `sleep_for_s`, `camera_down_for_s`). A decider is therefore a stateless function of one JSON value, which is exactly the shape Jev accepts.
-- `brain.ALERT_POLICY[kind] -> (priority, title)`, with cooldown in `Tuning`. Priority and cooldown are policy, not decision, so swapping the decider cannot change how loud an alert is. An import-time check fails if the table misses an `AlertKind`.
+- `brain.ALERT_POLICY[kind] -> (priority, title, episode_start)`, with cooldown in `Tuning`. A kind with `episode_start` (CRYING, keyed on the sleep tracker's `since`) skips the cooldown when its condition began after the last alert. Priority and cooldown are policy, not decision, so swapping the decider cannot change how loud an alert is. An import-time check fails if the table misses an `AlertKind`.
 
-**Streak semantics live in one place.** `VisionTrack` owns them. A confident in-crib reading increments or resets each streak. A low-confidence reading or a failed call leaves the streaks unchanged, because it is evidence of neither danger nor safety. `in_crib=False` resets everything, because a baby out of the crib is with a parent.
+**Streak semantics live in one place.** `VisionTrack` owns them. A confident reading of the baby lying in the crib or the parents' bed increments or resets each streak. A low-confidence reading or a failed call leaves the streaks unchanged, because it is evidence of neither danger nor safety. `location` held or not_visible resets everything, because a held baby is with a parent and an unseen one gives no position to judge.
 
 **Vision scheduling is in the core.** It is a pure decision over `VisionTrack`. Periodic checks run every 60 s. While a dangerous streak is pending they run every 15 s (`CONFIRM`), which brings "two consecutive checks" down from about 2 minutes to about 30 s. A check also runs when motion *ends* (`SETTLED_AFTER_MOTION`, at least 10 s apart), so the model sees the new resting position instead of motion blur. An in-flight request older than 45 s counts as lost.
 
@@ -117,7 +117,7 @@ Grafts applied to the base:
 Rejected:
 
 - A `Delivery` union carrying `retry_s` and `expire_s` in the domain (Sonnet, cross-judge). Those are Pushover transport parameters. Keeping them in `notify.py` is the boundary the design wants; the Pushover config requires both, which is the same guarantee one layer out.
-- Deriving streaks from a pruned observation window (Fable, cross-judge). The counters in `VisionTrack` have one writer and one rule set (confident in-crib readings move them, low confidence leaves them, out of crib resets them). A window would re-encode the same rules in a derivation.
+- Deriving streaks from a pruned observation window (Fable, cross-judge). The counters in `VisionTrack` have one writer and one rule set (confident readings in the crib or the parents' bed move them, low confidence leaves them, held or not visible resets them). A window would re-encode the same rules in a derivation.
 - `Persistence` objects per rule row (Haiku). Thresholds already live in `Tuning` and the rows read precomputed durations; another layer adds no deleted branch.
 - `UnionDecider` with a rules floor (Sonnet). Right shape for the day Jev arrives, not needed while rules are the only decider. The `Decider` protocol already fits it.
 - An `UNKNOWN` sleep state (Sonnet). The timeline derives gaps from `CameraChanged` events and the STIRRING start; a fifth state would add rows to every table for a display concern.
@@ -166,8 +166,8 @@ Rejected:
 ## Open questions and risks
 
 - Is "head to the left" the baby's left or the image's left? The sketch assumes the baby's left and the prompt will say so. The reference image should be taken with the head in the allowed position so the model can compare.
-- Should `in_crib=False` suppress position alerts (the current default, on the reasoning that the baby is with a parent) or raise its own alert?
-- Should an emergency condition that clears and returns inside the 10-minute cooldown alert again immediately? The brief says cooldown per type. For FACE_COVERED, a bypass when the condition cleared in between may be safer.
+- Should `location=not_visible` suppress position alerts (the current default, on the reasoning that the baby is with a parent) or raise its own alert?
+- Should an emergency condition that clears and returns inside the 10-minute cooldown alert again immediately? The brief says cooldown per type. CRYING now does this through `AlertPolicy.episode_start`. For FACE_COVERED, the same bypass when the condition cleared in between may be safer.
 - When Jev arrives, should the hard rules stay as a local floor (`JevDecider(fallback=RulesDecider)` with verdicts unioned), so a Jev outage or a wrong answer can never suppress an emergency? This design assumes yes.
 - Does the C210 accept a second RTSP session? It is unmeasured. The answer decides whether the one-process tradeoff is necessary or merely tidy.
 - Vision cost and latency: the defaults are Haiku 5.5, 640 px wide stills, a check every 60 s only while motion was seen since the last check and every 900 s on a static scene (15 s CONFIRM and the settle-after-motion check are unchanged). That is at most 1,440 calls a day with two small images each and about 96 on a quiet night. Measure the real monthly spend against the 100 USD credit before relaxing any lever.

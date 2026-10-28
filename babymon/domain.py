@@ -24,7 +24,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal, NewType
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 type Instant = datetime
 """tz-aware UTC. Naive datetimes never enter the core."""
@@ -60,15 +60,39 @@ class Eyes(StrEnum):
     UNKNOWN = "unknown"
 
 
+class BabyLocation(StrEnum):
+    CRIB = "crib"
+    PARENTS_BED = "parents_bed"
+    HELD = "held"
+    NOT_VISIBLE = "not_visible"
+
+    @property
+    def watched(self) -> bool:
+        """Lying where position alerts apply. Held or unseen resets the streaks."""
+        return self in (BabyLocation.CRIB, BabyLocation.PARENTS_BED)
+
+
 class Observation(Frozen):
     """One typed reading of one frame. Produced only by a VisionBackend."""
 
     body: BodyPosition
     head: HeadDirection
     face_covered: bool
-    in_crib: bool
+    location: BabyLocation
     eyes: Eyes
+    adult_present: bool = False
+    """Events stored before this field existed read as False."""
     confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_in_crib(cls, data: object) -> object:
+        """Events stored before `location` carry in_crib instead."""
+        if not isinstance(data, dict) or "in_crib" not in data:
+            return data
+        rest = {k: v for k, v in data.items() if k != "in_crib"}
+        in_crib = data["in_crib"]
+        return {"location": BabyLocation.CRIB if in_crib else BabyLocation.NOT_VISIBLE, **rest}
 
 
 class VisionReason(StrEnum):
@@ -126,7 +150,9 @@ class Tuning(Frozen):
 
     unsafe_streak: int = 2
     head_left_alert_s: float = 120.0
-    crying_alert_s: float = 60.0
+    crying_alert_s: float = 3.0
+    """Seconds of continuous crying before CRYING fires. A new crying episode alerts at
+    once even inside alert_cooldown_s."""
     camera_offline_alert_s: float = 60.0
     min_confidence: float = 0.5
     vision_period_s: float = 60.0
@@ -158,6 +184,8 @@ class Situation(Frozen):
     camera_down_for_s: float
     sleep: SleepState
     sleep_for_s: float
+    crying_for_s: float
+    """0.0 unless sleep is CRYING; includes the seconds of evidence before the switch."""
     observation: Observation | None
     observation_age_s: float | None
     face_covered_streak: int

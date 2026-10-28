@@ -15,7 +15,7 @@ Situation. There is no shared mutable state to lock.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import timedelta
 from typing import assert_never
@@ -45,6 +45,7 @@ from babymon.domain import (
     SetControls,
     Situation,
     SleepChanged,
+    SleepState,
     Tick,
     Tuning,
     Verdict,
@@ -53,7 +54,7 @@ from babymon.domain import (
     VisionObserved,
     VisionReason,
 )
-from babymon.sleep import Evidence, Signal, SleepTracker, advance, classify
+from babymon.sleep import CRY_CONFIRM_S, Evidence, Signal, SleepTracker, advance, classify
 
 AUDIO_STALE = timedelta(seconds=2)
 """An AudioSample older than this no longer counts as evidence of crying."""
@@ -63,13 +64,16 @@ AUDIO_STALE = timedelta(seconds=2)
 class AlertPolicy:
     priority: Priority
     title: str
+    episode_start: Callable[[MonitorState], Instant] | None = None
+    """When set, a condition that started after the last alert of this kind fires at once,
+    skipping the cooldown. The cooldown still limits re-alerts within one episode."""
 
 
 ALERT_POLICY: Mapping[AlertKind, AlertPolicy] = {
     AlertKind.FACE_COVERED: AlertPolicy(Priority.EMERGENCY, "Face covered"),
     AlertKind.ON_STOMACH: AlertPolicy(Priority.EMERGENCY, "Baby on stomach"),
     AlertKind.HEAD_LEFT: AlertPolicy(Priority.HIGH, "Head turned left"),
-    AlertKind.CRYING: AlertPolicy(Priority.HIGH, "Crying"),
+    AlertKind.CRYING: AlertPolicy(Priority.HIGH, "Crying", lambda state: state.sleep.since),
     AlertKind.AWAKE_DURING_NAP: AlertPolicy(Priority.NORMAL, "Awake"),
     AlertKind.CAMERA_OFFLINE: AlertPolicy(Priority.HIGH, "Camera offline"),
 }
@@ -85,9 +89,10 @@ def _seconds(since: Instant, until: Instant) -> float:
 class VisionTrack:
     """Vision scheduling plus the derived streaks the rules read.
 
-    Streak rules: a confident in-crib observation increments or resets each streak.
-    A low-confidence observation, or a failed check, leaves streaks unchanged (it is
-    neither evidence of danger nor of safety). in_crib=False resets everything.
+    Streak rules: a confident observation of the baby lying in the crib or the parents'
+    bed increments or resets each streak. A low-confidence observation, or a failed
+    check, leaves streaks unchanged (it is neither evidence of danger nor of safety).
+    Held or not visible resets everything.
     """
 
     in_flight_since: Instant | None = None
@@ -117,7 +122,7 @@ class VisionTrack:
         track = replace(self, in_flight_since=None, last=obs, last_at=fact.at)
         if obs.confidence < tuning.min_confidence:
             return track
-        if not obs.in_crib:
+        if not obs.location.watched:
             return replace(track, face_covered_streak=0, stomach_streak=0, head_left_since=None)
         head_left_since = None
         if obs.head is HeadDirection.LEFT:
@@ -304,6 +309,11 @@ def situation(state: MonitorState, tuning: Tuning) -> Situation:
         camera_down_for_s=0.0 if state.camera_up else _seconds(state.camera_since, at),
         sleep=state.sleep.state,
         sleep_for_s=_seconds(state.sleep.since, at),
+        crying_for_s=(
+            CRY_CONFIRM_S + _seconds(state.sleep.since, at)
+            if state.sleep.state is SleepState.CRYING
+            else 0.0
+        ),
         observation=vision.last,
         observation_age_s=None if vision.last_at is None else _seconds(vision.last_at, at),
         face_covered_streak=vision.face_covered_streak,
@@ -312,6 +322,12 @@ def situation(state: MonitorState, tuning: Tuning) -> Situation:
             0.0 if vision.head_left_since is None else _seconds(vision.head_left_since, at)
         ),
     )
+
+
+def _cooling_down(state: MonitorState, policy: AlertPolicy, last: Instant, tuning: Tuning) -> bool:
+    if policy.episode_start is not None and last < policy.episode_start(state):
+        return False
+    return _seconds(last, state.at) < tuning.alert_cooldown_s
 
 
 def gate(
@@ -325,10 +341,10 @@ def gate(
     ledger = dict(state.ledger)
     notifies: list[Notify] = []
     for verdict in verdicts:
-        last = ledger.get(verdict.kind)
-        if last is not None and _seconds(last, at) < tuning.alert_cooldown_s:
-            continue
         policy = ALERT_POLICY[verdict.kind]
+        last = ledger.get(verdict.kind)
+        if last is not None and _cooling_down(state, policy, last, tuning):
+            continue
         ledger[verdict.kind] = at
         alert = Alert(
             kind=verdict.kind,

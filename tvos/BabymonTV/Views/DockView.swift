@@ -24,11 +24,26 @@ struct DockView: View {
                 }
             }
             .focusSection()
-            .padding(.bottom, 10)
+            if let hint = focus.flatMap(Self.hint) {
+                Text(hint).font(.ui(30)).foregroundStyle(Theme.text)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 8)
+                    .transition(.opacity)
+            }
+            Spacer().frame(height: 10)
         }
         .onAppear { focus = .history }
         .simultaneousGesture(TapGesture().onEnded { model.touch() })
         .onMoveCommand { _ in model.touch() }
+    }
+
+    static func hint(_ item: DockItem) -> String? {
+        switch item {
+        case .armed:
+            "Armed: alerts are pushed to both phones. Off keeps watching and logging, but no phone is alerted."
+        case .nap:
+            "Nap mode adds one alert: a quiet push when the baby wakes up and stays awake, so you know the nap is over. Crying and safety alerts work with it on or off."
+        default: nil
+        }
     }
 
     private func toggleCard(_ item: DockItem) -> some View {
@@ -45,7 +60,7 @@ struct DockView: View {
                     .foregroundStyle(on || isArmed ? tint : Theme.muted).padding(.top, 2)
                 Spacer(minLength: 0)
                 HStack {
-                    Text(isArmed ? (on ? "Alerts on" : "Alerts off") : "When awake")
+                    Text(isArmed ? (on ? "Alerts on" : "Alerts off") : (on ? "Alerts when awake" : "No wake-up alert"))
                         .font(.ui(26)).foregroundStyle(Theme.muted).lineLimit(2).minimumScaleFactor(0.7)
                     Spacer()
                     ZStack(alignment: on ? .trailing : .leading) {

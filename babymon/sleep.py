@@ -47,6 +47,9 @@ class Edge:
     dwell_s: float
 
 
+CRY_CONFIRM_S = 3.0
+"""Seconds of continuous cry evidence before the tracker enters CRYING."""
+
 S, G = SleepState, Signal
 
 TRANSITIONS: Mapping[SleepState, Mapping[Signal, Edge]] = {
@@ -54,18 +57,18 @@ TRANSITIONS: Mapping[SleepState, Mapping[Signal, Edge]] = {
         G.MOVING: Edge(S.STIRRING, 3),
         G.ACTIVE: Edge(S.STIRRING, 1),
         G.EYES_OPEN: Edge(S.AWAKE, 30),
-        G.CRYING: Edge(S.CRYING, 3),
+        G.CRYING: Edge(S.CRYING, CRY_CONFIRM_S),
     },
     S.STIRRING: {
         G.QUIET: Edge(S.ASLEEP, 120),
         G.MOVING: Edge(S.AWAKE, 60),
         G.ACTIVE: Edge(S.AWAKE, 20),
         G.EYES_OPEN: Edge(S.AWAKE, 20),
-        G.CRYING: Edge(S.CRYING, 3),
+        G.CRYING: Edge(S.CRYING, CRY_CONFIRM_S),
     },
     S.AWAKE: {
         G.QUIET: Edge(S.ASLEEP, 300),
-        G.CRYING: Edge(S.CRYING, 3),
+        G.CRYING: Edge(S.CRYING, CRY_CONFIRM_S),
     },
     S.CRYING: {
         G.QUIET: Edge(S.AWAKE, 20),

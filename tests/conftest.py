@@ -14,6 +14,7 @@ from babymon.brain import MonitorState
 from babymon.domain import (
     AlertKind,
     AudioSample,
+    BabyLocation,
     BodyPosition,
     CameraStatus,
     Capabilities,
@@ -53,7 +54,7 @@ def observation(**overrides: object) -> Observation:
         body=BodyPosition.BACK,
         head=HeadDirection.CENTER,
         face_covered=False,
-        in_crib=True,
+        location=BabyLocation.CRIB,
         eyes=Eyes.CLOSED,
         confidence=0.9,
     )

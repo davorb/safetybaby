@@ -2,67 +2,303 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0d16">
 <title>babymon</title>
 <style>
-  :root { --asleep:#2f6fdb; --stirring:#e0b341; --awake:#e07b2f; --crying:#d2392f; --unknown:#8a8f98; }
-  * { box-sizing: border-box; }
-  body { font: 16px/1.4 system-ui, sans-serif; margin: 0 auto; max-width: 720px; padding: 8px;
-         background: #14161a; color: #e8e9ec; }
-  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: #9aa0aa; margin: 20px 0 6px; }
-  .banner { background: #7a2a24; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
-  .banner.warn { background: #6b5a1d; }
-  #feed { position: relative; background: #000; }
-  #frame { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 6px; display: block; }
-  #fullscreen { position: absolute; right: 8px; bottom: 8px; background: rgba(20,22,26,.7); }
-  #feed:fullscreen, #feed.full { display: flex; align-items: center; justify-content: center; }
+  :root {
+    --asleep:#4f8cff; --stirring:#e8c14d; --awake:#f0903c; --crying:#ef4d43; --unknown:#8a90a0;
+    --asleep-rgb:79,140,255; --stirring-rgb:232,193,77; --awake-rgb:240,144,60; --crying-rgb:239,77,67; --unknown-rgb:138,144,160;
+    --text:#dde2ee; --muted:#8f98ad; --accent-rgb:120,160,255;
+    --glass:rgba(255,255,255,.06); --glass-strong:rgba(255,255,255,.1);
+    --edge:rgba(255,255,255,.13); --edge-soft:rgba(255,255,255,.07);
+    --blur:blur(22px) saturate(150%);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: #090c14; color-scheme: dark; }
+  body { font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color: var(--text);
+         margin: 0 auto; max-width: 720px; min-height: 100vh;
+         padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+                  max(24px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+
+  .ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+             background: radial-gradient(120% 80% at 50% 0%, #131a2e 0%, #0b0f1b 55%, #080a12 100%); }
+  .ambient i { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .5; will-change: transform;
+               animation: drift 38s ease-in-out infinite alternate; }
+  .ambient i:nth-child(1) { width: 60vmax; height: 60vmax; left: -22vmax; top: -18vmax; background: #2d3f9e; }
+  .ambient i:nth-child(2) { width: 50vmax; height: 50vmax; right: -20vmax; top: 24vh; background: #5a2f8f; animation-duration: 46s; }
+  .ambient i:nth-child(3) { width: 44vmax; height: 44vmax; left: 8vw; bottom: -22vmax; background: #135a6b; animation-duration: 52s; }
+  @keyframes drift { to { transform: translate3d(6vmax, 4vmax, 0) scale(1.12); } }
+
+  .glass { background: var(--glass); border: 1px solid var(--edge); border-radius: 22px;
+           -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+           box-shadow: 0 10px 36px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.1); }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    :root { --glass: rgba(30,35,52,.92); }
+  }
+  .card { padding: 14px; margin-bottom: 14px; }
+  .card.plain { -webkit-backdrop-filter: none; backdrop-filter: none; padding: 6px; }
+
+  h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase;
+       letter-spacing: .09em; color: var(--muted); margin: 2px 2px 12px; }
+  h2 .info { margin-left: auto; }
+
+  .info { flex: none; width: 22px; height: 22px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center;
+          font: italic 600 12px/1 Georgia, serif; color: var(--muted); background: rgba(255,255,255,.07);
+          border: 1px solid var(--edge); cursor: help; }
+  .info:hover { color: var(--text); background: var(--glass-strong); }
+  [data-tip]:focus-visible, .switch input:focus-visible + .track { outline: 2px solid rgba(var(--accent-rgb), .8); outline-offset: 2px; }
+  [data-tip] { -webkit-touch-callout: none; }
+  [data-tip]:not(button):not(a):not(.info) { cursor: help; }
+
+  #banners { display: grid; gap: 8px; margin-bottom: 14px; }
+  #banners:empty { display: none; }
+  .banner { --c: var(--crying-rgb); display: flex; align-items: center; gap: 10px; padding: 11px 12px 11px 14px; border-radius: 16px;
+            background: rgba(var(--c), .16); border: 1px solid rgba(var(--c), .4); color: #f4dcd9;
+            -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+            box-shadow: 0 6px 24px rgba(var(--c), .12), inset 0 1px 0 rgba(255,255,255,.08); }
+  .banner.warn { --c: var(--stirring-rgb); color: #f1e8cc; }
+  .banner > span:first-child { flex: 1; }
+  .banner .info { background: rgba(var(--c), .2); border-color: rgba(var(--c), .45); color: inherit; }
+
+  #feed { position: relative; background: #000; border-radius: 17px; overflow: hidden; }
+  #frame { width: 100%; aspect-ratio: 16/9; background: #05070c; display: block; object-fit: cover; }
+  #feed:fullscreen, #feed.full { display: flex; align-items: center; justify-content: center; border-radius: 0; }
   #feed.full { position: fixed; inset: 0; z-index: 10; }
-  #feed:fullscreen #frame, #feed.full #frame { width: 100%; height: 100%; aspect-ratio: auto;
-                                               object-fit: contain; border-radius: 0; }
-  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 8px; }
-  #sleep { font-size: 28px; font-weight: 600; }
-  label { display: flex; gap: 6px; align-items: center; }
-  input[type=checkbox] { width: 22px; height: 22px; }
-  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 0; background: #2b3039; color: inherit; }
-  #bar { position: relative; height: 28px; background: #2b3039; border-radius: 4px; overflow: hidden; }
-  #bar div { position: absolute; top: 0; bottom: 0; }
-  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; margin-top: 6px; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
-  ul { list-style: none; padding: 0; margin: 0; }
-  li { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid #262a31; }
-  li img { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; background: #000; }
-  li .spacer { width: 96px; flex: none; }
-  li time { color: #9aa0aa; font-size: 13px; }
-  a { color: #7fb2ff; }
+  #feed:fullscreen #frame, #feed.full #frame { width: 100%; height: 100%; aspect-ratio: auto; object-fit: contain; }
+  .overlay { position: absolute; display: flex; align-items: center; gap: 8px; }
+  .overlay.tl { left: 10px; top: 10px; }
+  .overlay.br { right: 10px; bottom: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px;
+          font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #e9edf7;
+          background: rgba(12,15,24,.45); border: 1px solid var(--edge);
+          -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--crying); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  button { font: inherit; color: inherit; }
+  .btn { padding: 9px 16px; border-radius: 999px; border: 1px solid var(--edge); background: var(--glass-strong);
+         -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); font-size: 14px; font-weight: 500; cursor: pointer;
+         transition: background .2s, transform .1s; }
+  .btn:hover { background: rgba(255,255,255,.16); }
+  .btn:active { transform: scale(.97); }
+  .btn.dark { background: rgba(12,15,24,.5); }
+  .btn.primary { background: rgba(var(--accent-rgb), .22); border-color: rgba(var(--accent-rgb), .5); }
+  .btn.primary:hover { background: rgba(var(--accent-rgb), .32); }
+
+  .state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .pill { --c: var(--unknown-rgb); display: inline-flex; align-items: center; gap: 12px; padding: 10px 22px 10px 18px;
+          border-radius: 999px; font-size: 28px; font-weight: 650; letter-spacing: .01em; text-transform: capitalize; line-height: 1.1;
+          color: rgb(var(--c)); background: rgba(var(--c), .16); border: 1px solid rgba(var(--c), .5);
+          box-shadow: 0 0 34px rgba(var(--c), .22), inset 0 1px 0 rgba(255,255,255,.12);
+          -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); transition: background .4s, border-color .4s, color .4s; }
+  .pill::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: currentColor; box-shadow: 0 0 14px currentColor; }
+  .pill[data-state=asleep] { --c: var(--asleep-rgb); }
+  .pill[data-state=stirring] { --c: var(--stirring-rgb); }
+  .pill[data-state=awake] { --c: var(--awake-rgb); }
+  .pill[data-state=crying] { --c: var(--crying-rgb); }
+  .pill[data-state=crying]::before { animation: pulse 1.2s ease-in-out infinite; }
+  #held { color: var(--muted); font-size: 15px; }
+
+  .controls { display: grid; gap: 4px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--edge-soft); }
+  .ctl { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+  .ctl .info { margin-left: auto; }
+  .switch { position: relative; display: flex; align-items: center; gap: 14px; flex: 1; cursor: pointer; min-height: 44px; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .track { flex: none; width: 52px; height: 30px; border-radius: 999px; background: rgba(255,255,255,.1);
+           border: 1px solid var(--edge); box-shadow: inset 0 2px 6px rgba(0,0,0,.35); position: relative;
+           transition: background .25s, border-color .25s; }
+  .track::after { content: ""; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%;
+                  background: #cfd5e4; box-shadow: 0 2px 6px rgba(0,0,0,.45); transition: transform .25s; }
+  .switch input:checked + .track { background: rgba(var(--accent-rgb), .45); border-color: rgba(var(--accent-rgb), .7); }
+  .switch input:checked + .track::after { transform: translateX(22px); background: #eef2ff; }
+  .name { font-weight: 500; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 8px; padding-top: 12px;
+             border-top: 1px solid var(--edge-soft); }
+  #note { color: var(--muted); font-size: 14px; }
+  #nap_hint { color: var(--muted); font-size: 14px; margin: 8px 2px 0; }
+
+  #bar { position: relative; height: 40px; background: rgba(0,0,0,.28); border-radius: 12px; overflow: hidden;
+         border: 1px solid var(--edge-soft); box-shadow: inset 0 2px 8px rgba(0,0,0,.4); }
+  #bar div { position: absolute; top: 0; bottom: 0; opacity: .85; box-shadow: inset -1px 0 0 rgba(0,0,0,.35);
+             background-image: linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,0) 60%); }
+  #bar div:hover, #bar div:focus-visible { opacity: 1; }
+  .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin: 5px 3px 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px 4px 9px; border-radius: 999px;
+                 font-size: 13px; text-transform: capitalize; background: rgba(255,255,255,.05); border: 1px solid var(--edge-soft); }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; }
+
+  ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  li { --c: 255,255,255; display: flex; gap: 12px; align-items: flex-start; padding: 10px; border-radius: 16px;
+       background: rgba(255,255,255,.035); border: 1px solid var(--edge-soft); }
+  li.emergency { --c: var(--crying-rgb); background: rgba(var(--c), .13); border-color: rgba(var(--c), .45); }
+  li.high { --c: var(--awake-rgb); background: rgba(var(--c), .1); border-color: rgba(var(--c), .35); }
+  li img, li .spacer { width: 96px; height: 54px; flex: none; border-radius: 10px; }
+  li img { object-fit: cover; background: #000; border: 1px solid var(--edge-soft); }
+  li .spacer { display: none; }
+  li .body { min-width: 0; flex: 1; display: grid; gap: 5px; }
+  li .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  li time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .kind { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .badge { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+           color: #e4e8f2; background: rgba(255,255,255,.1); border: 1px solid var(--edge); }
+  .badge.emergency { color: #ffd9d5; background: rgba(var(--crying-rgb), .35); border-color: rgba(var(--crying-rgb), .8); }
+  .badge.high { color: #ffe3c8; background: rgba(var(--awake-rgb), .3); border-color: rgba(var(--awake-rgb), .75); }
+  .badge.undelivered { color: var(--muted); background: transparent; border-style: dashed; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .title { font-weight: 600; }
+  .facts { display: flex; flex-wrap: wrap; gap: 5px; }
+  .fact { padding: 1px 9px; border-radius: 999px; font-size: 13px; background: rgba(255,255,255,.07); border: 1px solid var(--edge-soft); }
+  .fact.bad { color: #ffd9d5; background: rgba(var(--crying-rgb), .28); border-color: rgba(var(--crying-rgb), .6); font-weight: 600; }
+  .fact.adult { color: #d4c8ff; background: rgba(150,120,255,.18); border-color: rgba(150,120,255,.45); }
+  li .detail { color: #bcc4d6; font-size: 14px; overflow-wrap: anywhere; }
+  a { color: #8db8ff; }
+  a.clip { align-self: flex-start; font-size: 13px; text-decoration: none; padding: 1px 4px; border-radius: 6px; }
+  a.clip:hover { text-decoration: underline; }
+  .empty { color: var(--muted); text-align: center; padding: 18px 0 8px; font-size: 14px; }
+
+  #tip { position: fixed; left: 0; top: 0; z-index: 100; max-width: min(310px, calc(100vw - 16px)); padding: 11px 14px;
+         border-radius: 16px; font-size: 13.5px; line-height: 1.45; color: #e6eaf4; white-space: pre-line;
+         background: rgba(22,27,42,.72); border: 1px solid rgba(255,255,255,.18);
+         -webkit-backdrop-filter: blur(22px) saturate(160%); backdrop-filter: blur(22px) saturate(160%);
+         box-shadow: 0 14px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.14);
+         opacity: 0; visibility: hidden; transform: translateY(4px); pointer-events: none;
+         transition: opacity .15s, transform .15s, visibility .15s; }
+  #tip.on { opacity: 1; visibility: visible; transform: none; pointer-events: auto; }
+  #tip b { color: #fff; font-weight: 650; }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { #tip { background: rgba(22,27,42,.97); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 420px) {
+    .pill { font-size: 25px; }
+    li img { width: 80px; height: 45px; }
+  }
 </style>
 </head>
 <body>
+<div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
 <div id="banners"></div>
-<div id="feed">
-  <img id="frame" alt="latest frame">
-  <button id="fullscreen">Full screen</button>
-</div>
-<div class="row">
-  <span id="sleep">...</span>
-  <span id="held"></span>
-</div>
-<div class="row">
-  <label><input type="checkbox" id="armed"> Armed</label>
-  <label><input type="checkbox" id="nap_mode"> Nap mode</label>
-  <button id="reference">Set reference</button>
-  <span id="note"></span>
-</div>
-<h2>Last 24 hours</h2>
-<div id="bar"></div>
-<div class="legend" id="legend"></div>
-<h2>Events</h2>
-<ul id="events"></ul>
+
+<section class="glass card plain">
+  <div id="feed">
+    <img id="frame" alt="latest frame">
+    <div class="overlay tl">
+      <span class="chip" tabindex="0" data-tipkey="live"><span class="dot"></span>Live</span>
+    </div>
+    <div class="overlay br">
+      <button type="button" class="btn dark" id="fullscreen" data-act data-tipkey="fullscreen">Full screen</button>
+    </div>
+  </div>
+</section>
+
+<section class="glass card">
+  <div class="state">
+    <button type="button" class="pill" id="sleep" data-state="unknown" data-tipkey="sleep">...</button>
+    <span id="held" tabindex="0" data-tipkey="held"></span>
+  </div>
+  <div class="controls">
+    <div class="ctl">
+      <label class="switch"><input type="checkbox" id="armed"><span class="track"></span><span class="name">Armed</span></label>
+      <button type="button" class="info" aria-label="About Armed" data-tipkey="armed">i</button>
+    </div>
+    <div class="ctl">
+      <label class="switch"><input type="checkbox" id="nap_mode"><span class="track"></span><span class="name">Nap mode</span></label>
+      <button type="button" class="info" aria-label="About Nap mode" data-tipkey="nap_mode">i</button>
+    </div>
+  </div>
+  <p id="nap_hint"></p>
+  <div class="actions">
+    <button type="button" class="btn primary" id="reference" data-act data-tipkey="reference">Set reference</button>
+    <button type="button" class="info" aria-label="About Set reference" data-tipkey="reference">i</button>
+    <span id="note" role="status"></span>
+  </div>
+</section>
+
+<section class="glass card">
+  <h2>Last 24 hours <button type="button" class="info" aria-label="About the timeline" data-tipkey="timeline">i</button></h2>
+  <div id="bar" tabindex="0" data-tipkey="timeline"></div>
+  <div class="axis" aria-hidden="true"><span>24 h ago</span><span>18 h</span><span>12 h</span><span>6 h</span><span>now</span></div>
+  <div class="legend" id="legend"></div>
+</section>
+
+<section class="glass card">
+  <h2>Events <button type="button" class="info" aria-label="About the events list" data-tipkey="events">i</button></h2>
+  <ul id="events"></ul>
+</section>
+
+<div id="tip" role="tooltip"></div>
 <script>
 const COLORS = {asleep:'var(--asleep)', stirring:'var(--stirring)', awake:'var(--awake)',
                 crying:'var(--crying)', unknown:'var(--unknown)'};
 const HOURS = 24;
 const $ = id => document.getElementById(id);
 let holdControlsUntil = 0;
+
+const STATE_MEANING = {
+  asleep: 'Still, quiet, eyes closed.',
+  stirring: 'Some movement or noise: settling, or starting to wake. Also the starting state after a restart.',
+  awake: 'Moving about or eyes open, but not crying.',
+  crying: 'Cry sound detected for several seconds.',
+  unknown: 'No data for this period: the service was off or just started.',
+};
+const PRIORITY_TIPS = {
+  emergency: 'Emergency: sent as an alarm that repeats until someone acknowledges it on the phone. Used for face covered and on stomach, after 2 consecutive confident vision checks.',
+  high: 'High: a prominent push notification. Used for crying (as soon as the baby has cried for 3 s), head turned left (after 2 min) and camera offline (after 60 s). A new crying episode alerts immediately, even within the 10 min cooldown.',
+  normal: 'Normal: a quiet heads-up. Used for awake during nap. Other alerts repeat at most every 10 min while the condition holds.',
+};
+const ALERT_TIPS = {
+  face_covered: 'Face covered: the AI sees nose or mouth blocked. Emergency after 2 consecutive confident vision checks. Repeats until acknowledged.',
+  on_stomach: 'On stomach: the baby is lying face down. Emergency after 2 consecutive confident vision checks. Repeats until acknowledged.',
+  head_left: 'Head turned left: the baby\'s face has pointed to their left for 2 min. High priority, repeats at most every 10 min while it holds.',
+  crying: 'Crying: high priority as soon as the baby has cried for 3 s. A new crying episode alerts immediately, even within the 10 min cooldown.',
+  awake_during_nap: 'Awake during nap: the baby woke while Nap mode is on. Normal priority, repeats at most every 10 min while it holds.',
+  camera_offline: 'Camera offline: no frames received for 60 s. High priority. Sleep tracking and vision cannot update until it is back.',
+};
+const EVENT_TYPES = {
+  sleep_changed: ['Sleep', 'The sleep state changed, for example asleep to stirring. Derived from motion, cry audio and vision.'],
+  vision: ['Vision', 'An AI look at a camera frame: body position, head direction, eyes, face covered, and where the baby is (crib, parents\' bed, held or not visible). Runs periodically, after movement settles, and as a quick follow-up when something looks risky.'],
+  alert: ['Alert', 'A notification the system decided to send. The badge shows how urgent it is.'],
+  controls: ['Controls', 'Armed or Nap mode was switched.'],
+  camera: ['Camera', 'The camera went offline or came back.'],
+};
+const BODY_TIPS = {
+  stomach: 'Body position the AI sees. On stomach is a risk position: emergency after 2 consecutive confident checks.',
+};
+const LOCATIONS = {
+  crib: ['in crib', false, 'The AI sees the baby in the crib. Position alerts (face covered, on stomach, head turned left) are active here.'],
+  parents_bed: ['in parents\' bed', false, 'The AI sees the baby in the parents\' bed, at the top of the frame. Position alerts are active here too.'],
+  held: ['held', true, 'Someone is holding the baby. Position streaks reset while held, so no position alert can build up.'],
+  not_visible: ['not visible', true, 'The AI cannot see the baby in the frame. Position streaks reset while the baby is not visible, so no position alert can build up.'],
+};
+const TIPS = {
+  live: 'Latest camera frame, refreshed every 2 s. A still image, not a video stream.',
+  fullscreen: 'Fill the screen with the live frame. On iPhone it fills the browser window. Tap again to exit.',
+  sleep: 'Sleep state: derived from motion in the cot, cry audio and whether the AI sees the eyes open.\n'
+       + 'Asleep: ' + STATE_MEANING.asleep + '\nStirring: ' + STATE_MEANING.stirring + '\n'
+       + 'Awake: ' + STATE_MEANING.awake + '\nCrying: ' + STATE_MEANING.crying,
+  held: 'How long the baby has been in this state, since the last change.',
+  armed: 'Armed: on sends push notifications. Off silences all of them, but sensing and logging keep running.',
+  nap_mode: 'Nap mode adds one alert: a quiet push when the baby wakes up and stays awake for a while (keeps moving or has eyes open, without crying), so you know the nap is over. Crying and safety alerts work with it on or off. Turn it on when you leave the room for a nap; leave it off when you are fine with the baby lying awake quietly.',
+  reference: 'Saves the current frame as your example of the correct, safe sleeping position. The AI compares what it sees against it. Press it while the baby is lying correctly.',
+  timeline: 'Sleep state over the last 24 hours, oldest on the left and now on the right. Tap a segment for its state and time range. Colours are in the key below.',
+  events: 'Newest first, last 24 hours, refreshed every 30 s.\nThumbnail: the camera frame saved with that check or alert.\nPlay clip: the recording at that moment.\nBadges show alert urgency: tap one for what it means.',
+  snapshot: 'Camera frame saved at the moment of this check or alert, so you can see what the AI saw.',
+  clip: 'Opens the recorded video segment at the time of this event.',
+  undelivered: 'The alert fired but the push service did not accept it (push is disabled or it failed). It is logged here and retried on the next cycle.',
+  adult: 'An adult is visible in the frame. The AI reports only the baby and ignores adults.',
+  face_covered: 'The AI sees the baby\'s nose or mouth covered. Emergency after 2 consecutive confident checks.',
+  head: 'Direction the baby\'s face points, from the baby\'s own perspective. Left for 2 min raises a high priority alert.',
+  eyes: 'Whether the AI sees the baby\'s eyes open or closed. Open eyes push the sleep state toward awake.',
+  banner_camera: 'No frames are arriving from the camera, so the live image, sleep tracking and position checks cannot update. A high priority "camera offline" alert goes out after 60 s.',
+  banner_vision: 'Vision needs an Anthropic API key. Without it the AI cannot check position, so face covered, on stomach and head turned left alerts are off. Motion and cry detection still work.',
+  banner_push: 'Push notifications are not configured. Alerts are still detected and logged in Events, but nothing reaches your phone.',
+  banner_state: 'The dashboard cannot read the service state. It may be starting up or stopped. This page keeps retrying.',
+};
+const tipOf = key => TIPS[key] || '';
+for (const el of document.querySelectorAll('[data-tipkey]')) el.dataset.tip = tipOf(el.dataset.tipkey);
 
 const get = async path => {
   const r = await fetch(path, {cache: 'no-store'});
@@ -71,6 +307,76 @@ const get = async path => {
 };
 const post = (path, body) => fetch(path, {method: 'POST', headers: {'content-type': 'application/json'},
                                           body: JSON.stringify(body)});
+
+function el(tag, cls, text, tip) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  if (tip) { n.dataset.tip = tip; n.tabIndex = 0; }
+  return n;
+}
+
+const tipEl = $('tip');
+let tipFor = null, tipPinned = false;
+
+function fillTip(text) {
+  tipEl.replaceChildren(...text.split('\n').flatMap((line, i) => {
+    const m = line.match(/^([^:.]{1,24}):\s+(.*)$/);
+    const nodes = m ? [el('b', '', m[1] + ':'), document.createTextNode(' ' + m[2])] : [document.createTextNode(line)];
+    return i ? [document.createTextNode('\n'), ...nodes] : nodes;
+  }));
+}
+
+function placeTip() {
+  if (!tipFor) return;
+  const r = tipFor.getBoundingClientRect();
+  const w = tipEl.offsetWidth, h = tipEl.offsetHeight, m = 8;
+  const left = Math.min(Math.max(r.left + r.width / 2 - w / 2, m), innerWidth - w - m);
+  const above = r.top - h - 10;
+  tipEl.style.left = left + 'px';
+  tipEl.style.top = (above >= m ? above : Math.min(r.bottom + 10, innerHeight - h - m)) + 'px';
+}
+
+function showTip(target, pin) {
+  if (tipFor && tipFor !== target) tipFor.removeAttribute('aria-describedby');
+  tipFor = target;
+  tipPinned = pin;
+  fillTip(target.dataset.tip);
+  target.setAttribute('aria-describedby', 'tip');
+  placeTip();
+  tipEl.classList.add('on');
+}
+
+function hideTip() {
+  if (tipFor) tipFor.removeAttribute('aria-describedby');
+  tipFor = null;
+  tipPinned = false;
+  tipEl.classList.remove('on');
+}
+
+const sweepTip = () => { if (tipFor && !tipFor.isConnected) hideTip(); };
+
+document.addEventListener('pointerover', ev => {
+  if (ev.pointerType !== 'mouse' || ev.target.closest('#tip')) return;
+  const t = ev.target.closest('[data-tip]');
+  if (t && t !== tipFor) showTip(t, false);
+  else if (!t && !tipPinned) hideTip();
+});
+document.addEventListener('click', ev => {
+  if (ev.target.closest('#tip')) return;
+  const t = ev.target.closest('[data-tip]');
+  if (!t || t.hasAttribute('data-act')) hideTip();
+  else if (t === tipFor && tipPinned) hideTip();
+  else showTip(t, true);
+});
+document.addEventListener('focusin', ev => {
+  const t = ev.target.closest('[data-tip]');
+  if (t && t.matches(':focus-visible')) showTip(t, false);
+});
+document.addEventListener('focusout', ev => { if (ev.target === tipFor && !tipPinned) hideTip(); });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') hideTip(); });
+addEventListener('scroll', placeTip, true);
+addEventListener('resize', placeTip);
 
 function duration(s) {
   s = Math.round(s);
@@ -81,97 +387,148 @@ function duration(s) {
 const clock = iso => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 
 function banners(list) {
-  $('banners').replaceChildren(...list.map(([cls, text]) => {
-    const d = document.createElement('div');
-    d.className = 'banner ' + cls;
-    d.textContent = text;
+  const box = $('banners');
+  const same = list.length === box.children.length && list.every(([cls, , tip], i) => {
+    const d = box.children[i];
+    return d.className === 'banner ' + cls && d.dataset.tip === tip;
+  });
+  if (same) {
+    list.forEach(([, text], i) => { box.children[i].firstChild.textContent = text; });
+    return;
+  }
+  box.replaceChildren(...list.map(([cls, text, tip]) => {
+    const d = el('div', 'banner ' + cls, null, tip);
+    d.setAttribute('role', 'status');
+    d.append(el('span', '', text), el('span', 'info', 'i'));
+    d.lastChild.setAttribute('aria-hidden', 'true');
     return d;
   }));
 }
 
 async function refreshState() {
   let s;
-  try { s = await get('/api/state'); } catch { banners([['', 'No state yet: the service is starting or down.']]); return; }
+  try { s = await get('/api/state'); } catch { banners([['', 'No state yet: the service is starting or down.', tipOf('banner_state')]]); return; }
   const list = [];
-  if (!s.camera_up) list.push(['', 'Camera is down for ' + duration(s.camera_down_for_s) + '.']);
-  if (!s.capabilities.vision) list.push(['warn', 'Vision is disabled: no Anthropic key. Position alerts are off.']);
-  if (!s.capabilities.push) list.push(['warn', 'Push is disabled: alerts are logged, not delivered.']);
+  if (!s.camera_up) list.push(['', 'Camera is down for ' + duration(s.camera_down_for_s) + '.', tipOf('banner_camera')]);
+  if (!s.capabilities.vision) list.push(['warn', 'Vision is disabled: no Anthropic key. Position alerts are off.', tipOf('banner_vision')]);
+  if (!s.capabilities.push) list.push(['warn', 'Push is disabled: alerts are logged, not delivered.', tipOf('banner_push')]);
   banners(list);
   $('sleep').textContent = s.sleep;
-  $('sleep').style.color = COLORS[s.sleep];
+  $('sleep').dataset.state = s.sleep;
   $('held').textContent = 'for ' + duration(s.sleep_for_s);
   if (Date.now() > holdControlsUntil) {
     $('armed').checked = s.controls.armed;
     $('nap_mode').checked = s.controls.nap_mode;
   }
+  $('nap_hint').textContent = s.controls.nap_mode
+    ? 'Nap mode is on: you get a push when the baby wakes up.'
+    : 'Nap mode is off: waking up quietly sends no push. Crying still alerts.';
 }
 
 function refreshFrame() {
   $('frame').src = '/api/frame.jpg?t=' + Date.now();
 }
 
+function fact(text, cls, tip) {
+  return el('span', 'fact ' + cls, text, tip);
+}
+
+function locationFact(location) {
+  const [text, notable, tip] = LOCATIONS[location] || [String(location).replace('_', ' '), true, 'Where the AI sees the baby.'];
+  return [text, notable ? 'bad' : '', tip];
+}
+
+function visionFacts(o) {
+  const facts = [
+    fact(o.body.replace('_', ' '), '', BODY_TIPS[o.body] || 'Body position the AI sees.'),
+    fact('head ' + o.head, '', tipOf('head')),
+    fact('eyes ' + o.eyes, '', tipOf('eyes')),
+    fact(...locationFact(o.location)),
+  ];
+  if (o.face_covered) facts.push(fact('FACE COVERED', 'bad', tipOf('face_covered')));
+  if (o.adult_present) facts.push(fact('adult in view', 'adult', tipOf('adult')));
+  if (o.body === 'stomach') facts[0].classList.add('bad');
+  return facts;
+}
+
 function describe(e) {
   const x = e.event;
   switch (x.type) {
-    case 'sleep_changed': return x.previous + ' to ' + x.current;
+    case 'sleep_changed': return [el('span', 'detail', x.previous + ' to ' + x.current)];
     case 'vision': {
-      const o = x.observation;
-      return [o.body, 'head ' + o.head, 'eyes ' + o.eyes, o.face_covered ? 'FACE COVERED' : '',
-              o.in_crib ? '' : 'out of crib'].filter(Boolean).join(', ');
+      const box = el('div', 'facts');
+      box.append(...visionFacts(x.observation));
+      return [box];
     }
-    case 'alert': return x.alert.priority.toUpperCase() + ' ' + x.alert.title + (x.delivered ? '' : ' (not delivered)');
-    case 'controls': return 'armed ' + x.controls.armed + ', nap mode ' + x.controls.nap_mode;
-    case 'camera': return 'camera ' + (x.up ? 'up' : 'down') + (x.detail ? ': ' + x.detail : '');
+    case 'alert': {
+      const nodes = [el('span', 'title', x.alert.title, ALERT_TIPS[x.alert.kind])];
+      if (x.alert.message) nodes.push(el('span', 'detail', x.alert.message));
+      return nodes;
+    }
+    case 'controls': return [el('span', 'detail', 'armed ' + x.controls.armed + ', nap mode ' + x.controls.nap_mode)];
+    case 'camera': return [el('span', 'detail', 'camera ' + (x.up ? 'up' : 'down') + (x.detail ? ': ' + x.detail : ''))];
   }
-  return x.type;
+  return [el('span', 'detail', x.type)];
+}
+
+function eventRow(e) {
+  const x = e.event;
+  const li = el('li');
+  const priority = x.type === 'alert' ? x.alert.priority : '';
+  if (priority) li.className = priority;
+  if (e.snapshot_url) {
+    const img = el('img', '', null, tipOf('snapshot'));
+    img.loading = 'lazy';
+    img.src = e.snapshot_url;
+    img.alt = 'snapshot';
+    li.append(img);
+  } else {
+    li.append(el('span', 'spacer'));
+  }
+  const meta = el('div', 'meta');
+  const [label, typeTip] = EVENT_TYPES[x.type] || [x.type, ''];
+  meta.append(el('time', '', clock(x.at)), el('span', 'kind', label, typeTip));
+  if (priority) meta.append(el('span', 'badge ' + priority, priority, PRIORITY_TIPS[priority]));
+  if (x.type === 'alert' && !x.delivered) meta.append(el('span', 'badge undelivered', 'not delivered', tipOf('undelivered')));
+  const body = el('div', 'body');
+  body.append(meta, ...describe(e));
+  if (e.clip_url) {
+    const a = el('a', 'clip', 'Play clip', tipOf('clip'));
+    a.href = e.clip_url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.dataset.act = '';
+    body.append(a);
+  }
+  li.append(body);
+  return li;
 }
 
 async function refreshEvents() {
   const events = await get('/api/events?hours=' + HOURS);
-  $('events').replaceChildren(...events.map(e => {
-    const li = document.createElement('li');
-    if (e.snapshot_url) {
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.src = e.snapshot_url;
-      li.append(img);
-    } else {
-      const s = document.createElement('span');
-      s.className = 'spacer';
-      li.append(s);
-    }
-    const body = document.createElement('div');
-    const t = document.createElement('time');
-    t.textContent = clock(e.event.at);
-    body.append(t, document.createElement('br'), describe(e));
-    if (e.clip_url) {
-      const a = document.createElement('a');
-      a.href = e.clip_url;
-      a.target = '_blank';
-      a.textContent = ' clip';
-      body.append(a);
-    }
-    li.append(body);
-    return li;
-  }));
+  $('events').replaceChildren(...events.map(eventRow));
+  if (!events.length) $('events').append(el('li', 'empty', 'No events in the last 24 hours.'));
+  sweepTip();
 }
 
 async function refreshTimeline() {
   const spans = await get('/api/timeline?hours=' + HOURS);
   const end = Date.now(), start = end - HOURS * 3600e3;
   $('bar').replaceChildren(...spans.map(sp => {
-    const d = document.createElement('div');
+    const state = sp.state || 'unknown';
     const a = Math.max(Date.parse(sp.start), start), b = Math.min(Date.parse(sp.end), end);
+    const d = el('div', '', null, state[0].toUpperCase() + state.slice(1) + ': ' + clock(sp.start) + ' to ' + clock(sp.end)
+                 + ' (' + duration((Date.parse(sp.end) - Date.parse(sp.start)) / 1000) + ')\n' + STATE_MEANING[state]);
     d.style.left = (100 * (a - start) / (end - start)) + '%';
     d.style.width = Math.max(0, 100 * (b - a) / (end - start)) + '%';
-    d.style.background = COLORS[sp.state || 'unknown'];
-    d.title = (sp.state || 'unknown') + ' ' + clock(sp.start) + ' to ' + clock(sp.end);
+    d.style.background = COLORS[state];
     return d;
   }));
+  sweepTip();
 }
 
 for (const [name, color] of Object.entries(COLORS)) {
-  const s = document.createElement('span');
+  const s = el('span', '', null, name[0].toUpperCase() + name.slice(1) + ': ' + STATE_MEANING[name]);
   const i = document.createElement('i');
   i.style.background = color;
   s.append(i, name);

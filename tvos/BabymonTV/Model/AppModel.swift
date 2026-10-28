@@ -147,7 +147,7 @@ final class AppModel {
             do {
                 let data = try await api.frame()
                 if let image = await Task.detached(priority: .utility, operation: { UIImage(data: data)?.preparingForDisplay() }).value {
-                    withAnimation(.easeInOut(duration: 0.4)) { frame = image }
+                    frame = image
                     frameAt = Date()
                     frameFailed = false
                 }
@@ -386,5 +386,5 @@ final class AppModel {
         return out
     }
 
-    var frameAge: Double? { frameAt.map { now.timeIntervalSince($0) } }
+    var frameAge: Double? { frameAt.map { max(0, now.timeIntervalSince($0)) } }
 }

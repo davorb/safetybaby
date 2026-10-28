@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from babymon.config import Settings, VisionConfig
 from babymon.domain import (
+    BabyLocation,
     BodyPosition,
     Eyes,
     Fact,
@@ -70,8 +71,18 @@ class _WireObservation(BaseModel):
     face_covered: bool = Field(
         description="True when the nose or mouth is hidden by fabric, a hand, or an object."
     )
-    in_crib: bool = Field(
-        description="False when the baby is absent from the crib or is being held."
+    location: BabyLocation = Field(
+        description=(
+            "Where the baby is. crib: in the crib in the middle of the image. parents_bed: "
+            "lying in the large bed at the top of the image. held: in someone's arms. "
+            "not_visible: no baby can be seen."
+        )
+    )
+    adult_present: bool = Field(
+        description=(
+            "True when an adult or older child is visible anywhere in the frame. Their "
+            "position never feeds the other fields."
+        )
     )
     eyes: Eyes = Field(description="open, closed, or unknown when the eyes cannot be seen.")
     confidence: float = Field(
@@ -84,8 +95,12 @@ class _WireObservation(BaseModel):
     )
 
 
-_BASE_PROMPT = """You watch a 4-month-old baby in a crib through a camera. The baby wears a \
-sleep sack and is placed on the back or at an angle. The image may be infrared and grayscale.
+_BASE_PROMPT = """You watch a 4-month-old baby through a camera in the parents' bedroom. The \
+crib stands in the middle of the image, close to the camera. The parents' bed is at the top of \
+the image, farther away. The baby sleeps in either one, wears a sleep sack, and is placed on \
+the back or at an angle. The image may be infrared and grayscale. In the parents' bed the baby \
+looks small, so look for the sleep sack among the bedding there before deciding no baby is \
+visible.
 
 Report what you see for the current frame only.
 
@@ -94,8 +109,15 @@ baby's left appears on the viewer's right. Work out where the head and feet are 
 the baby is oriented, then reason from that orientation. Do not read left or right off the \
 image edges.
 
-face_covered means the nose or mouth is hidden by fabric, a hand, or an object. in_crib is \
-false when the baby is absent or is being held.
+Adults are sometimes in the room, often lying in the parents' bed, sometimes next to the \
+baby. Every field describes the infant only: the small baby in the sleep sack. Never report \
+an adult's body, head, face, or eyes as the baby's, even when the adult is larger, closer, or \
+clearer than the baby. When an adult hides part of the baby, use unknown values and a low \
+confidence.
+
+face_covered means the nose or mouth is hidden by fabric, a hand, an object, or an adult's \
+body or bedding. location is held when the baby is in someone's arms and not_visible when no \
+baby can be seen.
 
 When you cannot tell, use the unknown value and a low confidence. Do not guess."""
 
