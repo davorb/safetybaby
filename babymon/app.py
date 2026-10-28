@@ -8,6 +8,7 @@ Actors and what each owns:
     vision      one in-flight model call                  -> facts
     brain       MonitorState (sole owner)                 -> effects, published Situation
     writer      ordered event appends                     -> Store
+    rollup      per-minute motion/audio fold, a brain tap -> minute writer -> Store
     alerter     delivery + AlertSent rows                 -> phones, Store
     retention   periodic Store.sweep                      -> disk
     ticker      1 Hz Tick                                 -> facts
@@ -42,7 +43,7 @@ from typing import Never, TextIO, assert_never
 import uvicorn
 from fastapi import FastAPI
 
-from babymon import brain, factlog
+from babymon import brain, factlog, rollup
 from babymon.audio import AudioClassifier, YamnetClassifier, run_audio
 from babymon.brain import MonitorState
 from babymon.camera import Camera, CameraOutputs, PcmWindow
@@ -53,6 +54,7 @@ from babymon.domain import (
     Event,
     Fact,
     Instant,
+    MinuteRollup,
     Notify,
     Record,
     RequestVision,
@@ -164,9 +166,12 @@ async def run(
         published: Latest[Situation] = Latest()
         publish = facts.put_nowait
 
-        record = None
+        minutes: asyncio.Queue[MinuteRollup] = asyncio.Queue()
+        taps = [_rollup_tap(tuning, minutes.put_nowait)]
         if record_facts is not None:
-            record = _fact_recorder(resources.enter_context(record_facts.open("a", buffering=1)))
+            taps.append(
+                _fact_recorder(resources.enter_context(record_facts.open("a", buffering=1)))
+            )
         if initial_controls is not None:
             publish(initial_controls)
 
@@ -200,10 +205,11 @@ async def run(
                         events,
                         alerts,
                         vision_requests,
-                        record,
+                        _tee(taps),
                     )
                 )
                 tg.create_task(run_writer(store, events))
+                tg.create_task(run_minute_writer(store, minutes))
                 tg.create_task(run_alerter(alerts, backends.notifier, stills, store, publish))
                 tg.create_task(backends.ticker(publish, now))
                 tg.create_task(run_retention(store))
@@ -222,6 +228,26 @@ def _fact_recorder(sink: TextIO) -> Callable[[Fact], None]:
     return record
 
 
+def _rollup_tap(tuning: Tuning, sink: Callable[[MinuteRollup], None]) -> Callable[[Fact], None]:
+    acc: rollup.Accumulator | None = None
+
+    def tap(fact: Fact) -> None:
+        nonlocal acc
+        acc, finished = rollup.step(acc, fact, tuning)
+        if finished is not None:
+            sink(finished)
+
+    return tap
+
+
+def _tee(taps: list[Callable[[Fact], None]]) -> Callable[[Fact], None]:
+    def tap(fact: Fact) -> None:
+        for each in taps:
+            each(fact)
+
+    return tap
+
+
 async def run_brain(
     state: MonitorState,
     decider: Decider,
@@ -231,14 +257,14 @@ async def run_brain(
     events: asyncio.Queue[Event],
     alerts: asyncio.Queue[Alert],
     vision_requests: Latest[RequestVision],
-    record: Callable[[Fact], None] | None = None,
+    tap: Callable[[Fact], None] | None = None,
 ) -> Never:
-    """The only place the async Decider meets the pure core. `record` sees every fact
-    as it is dequeued (`run --record-facts`)."""
+    """The only place the async Decider meets the pure core. `tap` sees every fact as it
+    is dequeued: the minute rollup and `run --record-facts` share it."""
     while True:
         fact = await facts.get()
-        if record is not None:
-            record(fact)
+        if tap is not None:
+            tap(fact)
         state, effects = brain.observe(state, fact, tuning)
         if isinstance(fact, Tick):
             situation = brain.situation(state, tuning)
@@ -273,6 +299,12 @@ async def run_writer(store: Store, events: asyncio.Queue[Event]) -> Never:
         await asyncio.to_thread(store.append, event)
 
 
+async def run_minute_writer(store: Store, minutes: asyncio.Queue[MinuteRollup]) -> Never:
+    while True:
+        minute = await minutes.get()
+        await asyncio.to_thread(store.append_minute, minute)
+
+
 async def run_ticker(publish: Callable[[Fact], None], after: Instant) -> Never:
     """1 Hz. Instants strictly increase and the first is strictly after `after` (the
     startup instant), which is what makes every Tick count in the brain."""
@@ -288,7 +320,7 @@ async def run_retention(store: Store, every_s: float = SWEEP_EVERY_S) -> Never:
     while True:
         await asyncio.sleep(every_s)
         swept = await asyncio.to_thread(store.sweep, utcnow())
-        if swept.segments or swept.snapshots or swept.events:
+        if swept.segments or swept.snapshots or swept.events or swept.minutes:
             log.info("swept %s", swept)
 
 

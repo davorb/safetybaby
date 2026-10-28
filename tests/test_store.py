@@ -14,6 +14,7 @@ from babymon.domain import (
     CameraChanged,
     Controls,
     ControlsChanged,
+    MinuteRollup,
     Priority,
     SleepChanged,
     SleepState,
@@ -406,3 +407,54 @@ class TestInstanceLock:
     def test_creates_the_data_directory(self, tmp_path: Path):
         with acquire_instance_lock(tmp_path / "new" / "dir"):
             assert (tmp_path / "new" / "dir" / "babymon.lock").exists()
+
+
+def minute(t: datetime, **overrides: object) -> MinuteRollup:
+    base = dict(
+        at=t,
+        motion_samples=240,
+        motion_mean=0.01,
+        motion_peak=0.2,
+        audio_samples=60,
+        loudness_mean_db=3.0,
+        loudness_peak_db=9.0,
+        cry_peak=0.1,
+        cry_seconds=0,
+    )
+    return MinuteRollup(**{**base, **overrides})
+
+
+class TestMinutes:
+    def test_round_trip_oldest_first_with_half_open_window(self, store: Store):
+        rows = [minute(at(120)), minute(at(0), cry_seconds=7), minute(at(60), motion_mean=None)]
+        for r in rows:
+            store.append_minute(r)
+
+        assert store.minutes(at(0), at(120)) == [rows[1], rows[2]]
+
+    def test_the_same_minute_twice_is_one_row(self, store: Store):
+        store.append_minute(minute(at(0), cry_seconds=1))
+        store.append_minute(minute(at(0), cry_seconds=2))
+
+        assert [m.cry_seconds for m in store.minutes(at(0), at(60))] == [2]
+
+    def test_minutes_follow_the_event_retention_not_the_media_one(self, store: Store):
+        store.append_minute(minute(NOW - EVENT_RETENTION - H))
+        store.append_minute(minute(NOW - 2 * RETENTION))
+
+        report = store.sweep(NOW)
+
+        assert report.minutes == 1
+        assert [m.at for m in store.minutes(NOW - 100 * RETENTION, NOW)] == [NOW - 2 * RETENTION]
+
+    def test_events_of_one_kind_oldest_first_without_a_limit(self, store: Store):
+        for n in range(600):
+            store.append(CameraChanged(at=at(n), up=n % 2 == 0, detail=""))
+        store.append(sleep_changed(at(5), SleepState.ASLEEP, SleepState.STIRRING))
+
+        found = store.events_of(CameraChanged, at(0), at(1000))
+
+        assert len(found) == 600
+        assert [e.at for e in found] == [at(n) for n in range(600)]
+        assert store.last_event_before(CameraChanged, at(10)) == found[9]
+        assert store.last_event_before(CameraChanged, at(0)) is None

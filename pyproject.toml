@@ -53,7 +53,13 @@ include_external_packages = true
 [[tool.importlinter.contracts]]
 name = "the pure core imports no I/O library"
 type = "forbidden"
-source_modules = ["babymon.domain", "babymon.sleep", "babymon.rules", "babymon.brain"]
+source_modules = [
+    "babymon.domain",
+    "babymon.sleep",
+    "babymon.rules",
+    "babymon.brain",
+    "babymon.rollup",
+]
 forbidden_modules = [
     "anthropic",
     "httpx",
