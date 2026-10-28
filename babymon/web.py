@@ -9,7 +9,8 @@ Store. No route touches MonitorState.
     GET  /api/state              Situation as JSON
     GET  /api/frame.jpg          latest Still (503 when the camera is down)
     GET  /api/timeline?hours=24  list[SleepSpan]
-    GET  /api/events?hours=24    events with snapshot URL and clip URL#t=offset
+    GET  /api/events?hours=24    events with snapshot URL and clip URL#t=offset;
+                                 since_id=N keeps only ids above N
     POST /api/controls           {"armed"?: bool, "nap_mode"?: bool}
     POST /api/reference          store the current Still as the good-position reference
     GET  /media/snapshots/{name}, /media/segments/{name}
@@ -115,11 +116,13 @@ def create_app(deps: WebDeps) -> FastAPI:
         return [{"state": s.state, "start": s.start, "end": s.end} for s in spans]
 
     @app.get("/api/events")
-    def events(hours: Hours = 24) -> list[dict[str, Any]]:
+    def events(hours: Hours = 24, since_id: int = Query(0, ge=0)) -> list[dict[str, Any]]:
         until = deps.now()
         stored = store.events(until - timedelta(hours=hours), until)
         out = []
         for item in sorted(stored, key=lambda s: s.event.at, reverse=True):
+            if item.id <= since_id:
+                continue
             event = item.event
             snapshot = event.snapshot if isinstance(event, VisionObserved | AlertSent) else None
             clip = store.clip_at(event.at)
