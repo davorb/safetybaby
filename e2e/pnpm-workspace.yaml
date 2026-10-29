@@ -1,0 +1,5 @@
+# libretto is installed from GitHub and builds dist/ in its prepare script. pnpm runs a
+# git dependency's scripts only for the exact commit approved here; after
+# `pnpm update libretto`, replace the hash with the one pnpm prints.
+allowBuilds:
+  "libretto@https://codeload.github.com/davorb/libretto/tar.gz/59ff93a5b88e29fca92847fafd2f1fc5567d8a5e": true

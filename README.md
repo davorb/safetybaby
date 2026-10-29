@@ -92,7 +92,7 @@ The sleep states are asleep, stirring, awake and crying. A fresh start begins in
 
 `e2e/` holds browser tests for the dashboard, written with [Libretto](https://github.com/davorb/libretto). Each spec in `e2e/specs/` describes a page's behavior in markdown. Libretto turns it into the Playwright test under `e2e/.libretto/generated/`, which is committed. `e2e/specs/app.md` describes the pages and the fixed data the tests rely on.
 
-The tests run against `scripts/e2e_server.py`, which serves the real dashboard over 21 days of synthetic data plus a few fixed recent events. It needs no camera and no keys. Libretto is linked from a checkout beside this repository (`../libretto`), so build it there first with `pnpm install && pnpm build`.
+The tests run against `scripts/e2e_server.py`, which serves the real dashboard over 21 days of synthetic data plus a few fixed recent events. It needs no camera and no keys. Libretto is installed from the `main` branch on GitHub and builds itself during `pnpm install`. The lockfile pins the commit. To move to a newer `main`, run `pnpm update libretto`, then copy the commit hash pnpm prints into `e2e/pnpm-workspace.yaml`. pnpm runs a git dependency's build only for a commit approved there.
 
 ```
 cd e2e && pnpm install && pnpm exec playwright install chromium
