@@ -88,6 +88,20 @@ The sleep states are asleep, stirring, awake and crying. A fresh start begins in
 
 `/stats` shows sleep statistics for the last 1 to 90 days, and `GET /api/stats?days=N&tz=<IANA zone>` returns the same numbers as JSON. Pass the browser's time zone as `tz`, because the container runs in UTC. A sleep day runs from 07:00 to 07:00 local time and the night is 19:00 to 07:00. Event rows and one summary row per minute of motion and sound are kept for 90 days, so the history reaches back to the first start after the upgrade. Every block reports how much time it covers. Time when the camera was down or the process was not running counts as unknown, never as the last sleep state.
 
+## End-to-end tests
+
+`e2e/` holds browser tests for the dashboard, written with [Libretto](https://github.com/davorb/libretto). Each spec in `e2e/specs/` describes a page's behavior in markdown. Libretto turns it into the Playwright test under `e2e/.libretto/generated/`, which is committed. `e2e/specs/app.md` describes the pages and the fixed data the tests rely on.
+
+The tests run against `scripts/e2e_server.py`, which serves the real dashboard over 21 days of synthetic data plus a few fixed recent events. It needs no camera and no keys. Libretto is linked from a checkout beside this repository (`../libretto`), so build it there first with `pnpm install && pnpm build`.
+
+```
+cd e2e && pnpm install && pnpm exec playwright install chromium
+pnpm app &          # the e2e server on http://127.0.0.1:8090
+pnpm test           # plain Playwright, no AI
+```
+
+Running the tests spends no AI tokens. After you change a spec, or change the dashboard on purpose and update `app.md`, run `pnpm generate`. It uses your `claude` login or `ANTHROPIC_API_KEY` and rewrites only the tests whose spec or `app.md` changed. When a test fails, `pnpm triage` says whether the dashboard or the test is wrong, and `pnpm fix` offers to update the spec and regenerate it.
+
 ## Vision cost
 
 Each check sends up to two JPEG images, the reference and the current frame, downscaled to `BABYMON_VISION__API_FRAME_WIDTH` (640 px) wide. The periodic check runs every `BABYMON_TUNING__VISION_PERIOD_S` (60 s) only when motion was seen since the last check. On a still scene it runs every `BABYMON_TUNING__VISION_PERIOD_QUIET_S` (900 s). That is at most about 1,440 calls a day and about 96 on a quiet night. A check also runs when motion settles. `BABYMON_VISION__MODEL` picks the model (default `claude-haiku-5-5`). On Haiku 5.5 a quiet night costs on the order of a dollar or two a month. `claude-opus-5-5` costs roughly fifty times more per call, and the original default of one full-size check per minute on Opus came to about a thousand dollars a month, so change the model with care. A longer period delays "face covered" and "on stomach", which need two consecutive checks, by the same amount. While a dangerous reading is pending, checks run every `BABYMON_TUNING__VISION_CONFIRM_S` (15 s) regardless.
