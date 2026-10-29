@@ -1,0 +1,3 @@
+node_modules/
+.libretto/*
+!.libretto/generated/
